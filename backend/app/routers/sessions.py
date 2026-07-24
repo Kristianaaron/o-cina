@@ -1,7 +1,6 @@
 """Session management endpoints."""
 import time
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -9,7 +8,8 @@ from sqlalchemy import String
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Session as SessionModel, Message, Project, Agent
+from app.models import Agent, Message, Project
+from app.models import Session as SessionModel
 
 router = APIRouter()
 
@@ -18,41 +18,41 @@ router = APIRouter()
 
 class SessionCreate(BaseModel):
     project_id: str = Field(..., description="Project to associate with")
-    agent_id: Optional[str] = Field(None, description="Agent running this session")
-    summary: Optional[str] = Field(None, description="Session summary/title")
+    agent_id: str | None = Field(None, description="Agent running this session")
+    summary: str | None = Field(None, description="Session summary/title")
 
 
 class SessionUpdate(BaseModel):
-    summary: Optional[str] = None
+    summary: str | None = None
 
 
 class MessageCreate(BaseModel):
     content: str = Field(..., min_length=1, description="Message content")
-    agent_id: Optional[str] = Field(None, description="Sending agent ID")
+    agent_id: str | None = Field(None, description="Sending agent ID")
     msg_type: str = Field(default="text", description="Message type: text, tool, result, error")
 
 
 class SessionOut(BaseModel):
     id: str
-    project_id: Optional[str] = None
-    agent_id: Optional[str] = None
-    summary: Optional[str] = None
+    project_id: str | None = None
+    agent_id: str | None = None
+    summary: str | None = None
     message_count: int = 0
     created_at: float
-    updated_at: Optional[float] = None
+    updated_at: float | None = None
 
     model_config = {"from_attributes": True}
 
 
 class MessageOut(BaseModel):
     id: str
-    session_id: Optional[str] = None
-    from_agent: Optional[str] = None
-    to_agent: Optional[str] = None
+    session_id: str | None = None
+    from_agent: str | None = None
+    to_agent: str | None = None
     msg_type: str = "text"
     payload: dict = {}
     timestamp: float
-    agent_name: Optional[str] = None
+    agent_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -93,7 +93,7 @@ def create_session(body: SessionCreate, db: Session = Depends(get_db)):
 @router.get("/projects/{project_id}/sessions")
 def list_sessions(
     project_id: str,
-    agent_id: Optional[str] = Query(None),
+    agent_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),

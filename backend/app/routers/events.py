@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
@@ -28,7 +29,7 @@ async def events_stream(last_event_id: str = ""):
                 try:
                     message = await asyncio.wait_for(queue.get(), timeout=30)
                     yield message
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Send keepalive comment every 30s
                     yield ": keepalive\n\n"
                     continue
@@ -48,11 +49,11 @@ async def events_stream(last_event_id: str = ""):
     )
 
 
-async def emit_event(event_type: str, data: dict):
-    """Broadcast event to all connected SSE clients."""
+def emit_event(event_type: str, data: dict):
+    """Broadcast event to all connected SSE clients (sync-safe)."""
     message = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
     dead = []
-    for lid, queue in _event_queues.items():
+    for lid, queue in list(_event_queues.items()):
         try:
             queue.put_nowait(message)
         except asyncio.QueueFull:

@@ -3,7 +3,6 @@
 Real process management via ProcessManager + adapter framework.
 """
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -13,7 +12,7 @@ from app.adapters.base import get_adapter, list_adapters
 from app.database import get_db
 from app.engine import process_manager
 from app.models import Agent, AgentStatus
-from app.schemas import AgentCreate, AgentUpdate, AgentOut
+from app.schemas import AgentCreate, AgentOut, AgentUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +49,10 @@ def register_agent(agent: AgentCreate, db: Session = Depends(get_db)):
 
 @router.get("/agents")
 def list_agents(
-    status: Optional[str] = Query(None),
-    harness: Optional[str] = Query(None),
-    skill: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    status: str | None = Query(None),
+    harness: str | None = Query(None),
+    skill: str | None = Query(None),
+    search: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -159,6 +158,16 @@ def start_agent(agent_id: str, db: Session = Depends(get_db)):
         agent.status = AgentStatus.running
         db.commit()
 
+        try:
+            from app.routers.events import emit_event
+            emit_event("agent.status", {
+                "agent_id": agent_id,
+                "status": "running",
+                "pid": handle.pid,
+            })
+        except Exception:
+            pass
+
         return {
             "status": "running",
             "agent_id": agent_id,
@@ -192,6 +201,12 @@ def stop_agent(agent_id: str, force: bool = Query(False), db: Session = Depends(
         agent.pgid = None
         agent.process_started_at = None
         db.commit()
+
+        try:
+            from app.routers.events import emit_event
+            emit_event("agent.status", {"agent_id": agent_id, "status": "stopped"})
+        except Exception:
+            pass
 
         return {"status": "stopped", "agent_id": agent_id, "killed": success}
     except Exception as e:

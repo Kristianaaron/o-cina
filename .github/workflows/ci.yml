@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
   backend:
@@ -19,7 +19,7 @@ jobs:
       - name: Test
         run: cd backend && CUDA_VISIBLE_DEVICES='' python -m pytest tests/ -v --tb=short
       - name: Lint
-        run: cd backend && (python -m ruff check app/ || python -m flake8 app/)
+        run: cd backend && python -m ruff check app/
 
   frontend:
     runs-on: ubuntu-latest
@@ -30,5 +30,7 @@ jobs:
           node-version: '20'
       - name: Install deps
         run: cd frontend && npm ci
+      - name: Test
+        run: cd frontend && npx vitest run --config vitest.config.js
       - name: Build
         run: cd frontend && npm run build

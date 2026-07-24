@@ -1,19 +1,22 @@
 """Workflows CRUD + execution endpoints with real engine integration."""
 import asyncio
-import time
 import logging
-from typing import Optional
+import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Workflow, WorkflowNode, WorkflowEdge, Task, Message
-from app.schemas import (
-    WorkflowCreate, WorkflowUpdate, WorkflowOut, TaskOut, MessageOut, WorkflowExecute,
-    WorkflowNodeIn, WorkflowEdgeIn,
-)
 from app.engine import workflow_engine
+from app.models import Message, Task, Workflow, WorkflowEdge, WorkflowNode
+from app.schemas import (
+    MessageOut,
+    TaskOut,
+    WorkflowCreate,
+    WorkflowExecute,
+    WorkflowOut,
+    WorkflowUpdate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,10 +121,9 @@ def update_workflow(
             setattr(existing, field, value)
     existing.updated_at = time.time()
 
-    # Replace nodes + edges if provided
+    # Replace graph pieces when provided (nodes and/or edges independently)
     if wf.nodes is not None:
         db.query(WorkflowNode).filter(WorkflowNode.workflow_id == workflow_id).delete()
-        db.query(WorkflowEdge).filter(WorkflowEdge.workflow_id == workflow_id).delete()
         for n in wf.nodes:
             db.add(WorkflowNode(
                 workflow_id=workflow_id,
@@ -130,6 +132,9 @@ def update_workflow(
                 node_type=n.node_type,
                 config=n.config,
             ))
+
+    if wf.edges is not None:
+        db.query(WorkflowEdge).filter(WorkflowEdge.workflow_id == workflow_id).delete()
         for e in wf.edges:
             db.add(WorkflowEdge(
                 workflow_id=workflow_id,

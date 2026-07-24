@@ -1,7 +1,6 @@
 """Guardrail engine — loop detection, timeouts, approval gates, budget limits."""
-import time
 import logging
-from typing import Optional
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +84,7 @@ class GuardrailEngine:
             return True
         return False
 
-    def check_approval_gate(self, current_node: str, approval_nodes: list) -> Optional[str]:
+    def check_approval_gate(self, current_node: str, approval_nodes: list) -> str | None:
         """Return the node ref if an approval gate is hit, else None."""
         if current_node in approval_nodes:
             logger.info("Approval gate hit: node %s", current_node)
@@ -93,7 +92,7 @@ class GuardrailEngine:
         return None
 
     def check_budget(
-        self, max_tokens: Optional[int] = None, max_cost: Optional[float] = None
+        self, max_tokens: int | None = None, max_cost: float | None = None
     ) -> dict:
         """Budget check — returns info dict. Caller accumulates tokens/cost.
 

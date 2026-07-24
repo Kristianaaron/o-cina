@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import {
   fetchAgent, startAgent, stopAgent, restartAgent, deleteAgent,
@@ -183,6 +183,12 @@ export default function AgentDetailPage() {
           Restart
         </button>
         <div className="flex-1" />
+        <Link
+          to={`/terminals?agent=${agent.id}`}
+          className="px-3 py-1.5 text-sm bg-zinc-900 text-zinc-300 rounded border border-zinc-700 font-mono hover:border-zinc-500"
+        >
+          Open in Herd
+        </Link>
         <button
           onClick={handleDelete}
           className={`px-3 py-1.5 text-sm rounded border font-mono ${

@@ -9,6 +9,8 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
 
+  # Optional standalone Chroma server. The backend currently uses a local
+  # PersistentClient under ~/.o-cina/data/chroma (see memory_store.py).
   chromadb:
     image: chromadb/chroma:0.5.23
     ports:
@@ -17,20 +19,25 @@ services:
       - chroma_data:/chroma/chroma
     environment:
       - ANONYMIZED_TELEMETRY=false
+    profiles: ["full"]
 
   celery:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=4
+    command: celery -A app.celery_app:celery_app worker --loglevel=info --concurrency=4
     volumes:
       - ./backend:/app
+      - ocina_data:/root/.o-cina/data
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=sqlite:////root/.o-cina/data/center.db
+      - CHROMA_PERSIST_DIR=/root/.o-cina/data/chroma
     depends_on:
       - redis
+    profiles: ["full"]
 
 volumes:
   redis_data:
   chroma_data:
+  ocina_data:

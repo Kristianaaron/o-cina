@@ -5,7 +5,6 @@ All routers can optionally depend on get_current_user to protect endpoints.
 """
 import hashlib
 import logging
-from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -25,9 +24,9 @@ def hash_token(token: str) -> str:
 
 
 def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
-) -> Optional[User]:
+) -> User | None:
     """FastAPI dependency: resolve Bearer token to a User.
 
     Returns None if no credentials are provided (open access).
@@ -39,7 +38,7 @@ def get_current_user(
     token_hash = hash_token(credentials.credentials)
     api_key = (
         db.query(ApiKey)
-        .filter(ApiKey.key_hash == token_hash, ApiKey.revoked == False)  # noqa: E712
+        .filter(ApiKey.key_hash == token_hash, ApiKey.revoked.is_(False))
         .first()
     )
     if api_key is None:
@@ -58,7 +57,7 @@ def get_current_user(
 
 
 def require_user(
-    user: Optional[User] = Depends(get_current_user),
+    user: User | None = Depends(get_current_user),
 ) -> User:
     """FastAPI dependency: require a valid authenticated user.
 

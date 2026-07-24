@@ -2,7 +2,9 @@
 
 Importing this package auto-registers all built-in adapters.
 """
-from app.adapters import base
-from app.adapters import hermes  # noqa: F401 — auto-registers
+from app.adapters import (
+    base,
+    hermes,
+)
 
 __all__ = ["base", "hermes"]

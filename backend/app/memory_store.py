@@ -1,19 +1,23 @@
 """ChromaDB-based memory store with per-project collections and semantic search."""
+# Force CPU-only ONNX Runtime BEFORE chromadb imports it — avoids GPU detection hangs on ARM64
+import os as _os
 import time
 import uuid
 from pathlib import Path
-from typing import Optional
 
-# Force CPU-only ONNX Runtime BEFORE chromadb imports it — avoids GPU detection hangs on ARM64
-import os as _os
 _os.environ["CUDA_VISIBLE_DEVICES"] = ""
 _os.environ["ONNXRUNTIME_DISABLE_CUDA"] = "1"
 
 import chromadb
 from chromadb.utils import embedding_functions
 
-DEFAULT_PERSIST_DIR = str(Path.home() / "o-cina" / "data" / "chroma")
+# Keep chroma under ~/.o-cina alongside SQLite (portable macOS + Linux)
+DEFAULT_PERSIST_DIR = _os.getenv(
+    "CHROMA_PERSIST_DIR",
+    str(Path.home() / ".o-cina" / "data" / "chroma"),
+)
 DEFAULT_TOP_K = 5
+Path(DEFAULT_PERSIST_DIR).mkdir(parents=True, exist_ok=True)
 
 
 class MemoryStore:
@@ -36,7 +40,7 @@ class MemoryStore:
     def _collection_name(self, project_id: str) -> str:
         return f"project_{project_id}"
 
-    def _get_or_create_collection(self, project_id: str, metadata: Optional[dict] = None) -> chromadb.Collection:
+    def _get_or_create_collection(self, project_id: str, metadata: dict | None = None) -> chromadb.Collection:
         name = self._collection_name(project_id)
         col = self._client.get_or_create_collection(
             name=name,
@@ -60,7 +64,7 @@ class MemoryStore:
     # ── Memory CRUD ──────────────────────────────────────────────────────────
 
     def add_memory(self, project_id: str, content: str, source: str = "user",
-                   metadata: Optional[dict] = None, memory_id: Optional[str] = None) -> str:
+                   metadata: dict | None = None, memory_id: str | None = None) -> str:
         """Add a memory entry to a project's collection.
 
         Args:
@@ -90,7 +94,7 @@ class MemoryStore:
         )
         return mid
 
-    def get_memory(self, project_id: str, memory_id: str) -> Optional[dict]:
+    def get_memory(self, project_id: str, memory_id: str) -> dict | None:
         """Get a single memory by ID."""
         try:
             col = self._client.get_collection(name=self._collection_name(project_id), embedding_function=self._ef)
@@ -105,8 +109,8 @@ class MemoryStore:
             pass
         return None
 
-    def update_memory(self, project_id: str, memory_id: str, content: Optional[str] = None,
-                      metadata: Optional[dict] = None):
+    def update_memory(self, project_id: str, memory_id: str, content: str | None = None,
+                      metadata: dict | None = None):
         """Update a memory entry."""
         col = self._get_or_create_collection(project_id)
         docs, metas = [], []
@@ -128,7 +132,7 @@ class MemoryStore:
     # ── Semantic search ──────────────────────────────────────────────────────
 
     def search(self, project_id: str, query: str, top_k: int = DEFAULT_TOP_K,
-               source: Optional[str] = None, tags: Optional[list] = None) -> list[dict]:
+               source: str | None = None, tags: list | None = None) -> list[dict]:
         """Semantic search within a project's memory collection.
 
         Args:
@@ -197,7 +201,7 @@ class MemoryStore:
         return ids
 
     def list_memories(self, project_id: str, limit: int = 50, offset: int = 0,
-                      source: Optional[str] = None) -> list[dict]:
+                      source: str | None = None) -> list[dict]:
         """List memories in a project (most recent first)."""
         try:
             col = self._client.get_collection(name=self._collection_name(project_id), embedding_function=self._ef)
@@ -216,7 +220,7 @@ class MemoryStore:
         memories.sort(key=lambda m: float(m["metadata"].get("created_at", 0)), reverse=True)
         return memories
 
-    def count(self, project_id: str, source: Optional[str] = None) -> int:
+    def count(self, project_id: str, source: str | None = None) -> int:
         """Count memories in a project, optionally filtered by source."""
         try:
             col = self._client.get_collection(name=self._collection_name(project_id), embedding_function=self._ef)

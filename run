@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Convenience launcher for O-cina (macOS + Linux)
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT"
+
+# Prefer 3.12/3.11 (Homebrew on macOS, system on modern Linux)
+if [[ -z "${PYTHON:-}" ]]; then
+  for candidate in python3.12 python3.11 python3; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      PYTHON="$candidate"
+      break
+    fi
+  done
+fi
+PYTHON="${PYTHON:-python3}"
+
+PY_VER="$("$PYTHON" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
+if [[ "$(printf '%s\n' "$PY_VER" "3.11" | sort -V | head -n1)" != "3.11" ]]; then
+  echo "Python 3.11+ required (found $PY_VER via $PYTHON)." >&2
+  echo "On macOS: brew install python@3.12" >&2
+  exit 1
+fi
+
+if [[ ! -d "$ROOT/.venv" ]]; then
+  echo "Creating virtualenv with $PYTHON ($PY_VER)..."
+  "$PYTHON" -m venv "$ROOT/.venv"
+fi
+
+# shellcheck disable=SC1091
+source "$ROOT/.venv/bin/activate"
+
+pip install -q -r backend/requirements.txt
+
+mkdir -p "$HOME/.o-cina/data" "$HOME/.o-cina/logs" "$HOME/.o-cina/data/chroma"
+
+export DATABASE_URL="${DATABASE_URL:-sqlite:///$HOME/.o-cina/data/center.db}"
+export OC_PORT="${OC_PORT:-${BACKEND_PORT:-8002}}"
+export OC_HOST="${OC_HOST:-${BACKEND_HOST:-127.0.0.1}}"
+
+"$ROOT/scripts/migrate.sh"
+exec "$ROOT/scripts/start.sh"

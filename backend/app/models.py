@@ -3,11 +3,15 @@
 Consolidated from dual model files (models.py + models/__init__.py).
 Uses modern Mapped/mapped_column style with cascades and proper relationships.
 """
+from __future__ import annotations
+
 import enum
 import time
 import uuid
-from sqlalchemy import String, Text, Float, Integer, Boolean, JSON, ForeignKey
+
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.database import Base
 
 

@@ -3,13 +3,17 @@ import os
 import tempfile
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import inspect
 
 # Use a temp file-based SQLite for tests (in-memory is unreliable with connection pooling)
 _tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False, prefix="ocina_test_")
 TEST_DB_URL = f"sqlite:///{_tmp_db.name}"
 os.environ["DATABASE_URL"] = TEST_DB_URL
+# Avoid Chroma writing into the real home dir during tests
+os.environ.setdefault(
+    "CHROMA_PERSIST_DIR",
+    tempfile.mkdtemp(prefix="ocina_chroma_test_"),
+)
 
 from app.database import Base, get_db, SessionLocal, engine
 import app.models  # noqa: F401 — register all models with Base
@@ -21,11 +25,12 @@ Base.metadata.create_all(engine)
 @pytest.fixture(autouse=True)
 def truncate_tables():
     """Truncate all tables before each test for isolation."""
-    from sqlalchemy import inspect
     insp = inspect(engine)
     with engine.connect() as conn:
         for table_name in reversed(insp.get_table_names()):
-            conn.execute(Base.metadata.tables[table_name].delete())
+            table = Base.metadata.tables.get(table_name)
+            if table is not None:
+                conn.execute(table.delete())
         conn.commit()
 
 
@@ -56,9 +61,9 @@ def client(test_db):
     main_mod.app.dependency_overrides.clear()
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def cleanup_db():
-    """Remove temp DB file after all tests."""
+    """Remove temp DB file after the full test session."""
     yield
     try:
         os.unlink(_tmp_db.name)

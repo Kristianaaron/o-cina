@@ -1,0 +1,15 @@
+# FastAPI-friendly lint defaults
+target-version = "py311"
+line-length = 100
+
+[lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+  "B008",  # Depends() in defaults is idiomatic FastAPI
+  "B904",  # raise HTTPException from err — noisy for API routers
+  "E501",  # line length — leave to formatter when added
+  "UP042", # StrEnum migration — keep str, enum.Enum for broader compat
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["B011"]

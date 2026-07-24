@@ -5,29 +5,28 @@ Wraps the Hermes Agent CLI for spawning managed agent instances.
 
 import os
 import shutil
-import subprocess
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from app.adapters.base import AgentAdapter
+from app.adapters.base import AgentAdapter, register_adapter
 
 
 class HermesAdapter(AgentAdapter):
     """Adapter for Hermes Agent (CLI-based)."""
 
     harness_type = "hermes"
-    default_skills = ["coding", "orchestration", "tool-use"]
+    _DEFAULT_SKILLS = ["coding", "orchestration", "tool-use"]
 
-    def register_info(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def register_info(self, config: dict[str, Any]) -> dict[str, Any]:
         info = {
             "name": config.get("name", "hermes-agent"),
             "harness": "hermes",
             "model": config.get("model"),
             "provider": config.get("provider", "local"),
-            "skills": config.get("skills", self.default_skills),
+            "skills": config.get("skills", list(self._DEFAULT_SKILLS)),
         }
         return info
 
-    def build_command(self, config: Dict[str, Any]) -> List[str]:
+    def build_command(self, config: dict[str, Any]) -> list[str]:
         """Build the `hermes` CLI command.
 
         Config keys:
@@ -56,7 +55,7 @@ class HermesAdapter(AgentAdapter):
 
         return cmd
 
-    def build_env(self, config: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    def build_env(self, config: dict[str, Any]) -> dict[str, str] | None:
         env = {}
         if config.get("model"):
             env["HERMES_MODEL"] = config["model"]
@@ -64,10 +63,10 @@ class HermesAdapter(AgentAdapter):
             env["HERMES_WORKDIR"] = config["workdir"]
         return env if env else None
 
-    def build_cwd(self, config: Dict[str, Any]) -> Optional[str]:
+    def build_cwd(self, config: dict[str, Any]) -> str | None:
         return config.get("workdir", os.environ.get("HOME"))
 
-    def resource_limits(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def resource_limits(self, config: dict[str, Any]) -> dict[str, Any]:
         # Hermes can be memory-intensive — sensible defaults
         return {
             "memory_bytes": config.get("memory_limit", 4 * 1024**3),  # 4GB default
@@ -79,10 +78,9 @@ class HermesAdapter(AgentAdapter):
     def sandbox_required(self) -> bool:
         return False
 
-    def default_skills(self) -> List[str]:
-        return self.default_skills
+    def default_skills(self) -> list[str]:
+        return list(self._DEFAULT_SKILLS)
 
 
 # Auto-register when imported
-from app.adapters.base import register_adapter
 register_adapter(HermesAdapter())

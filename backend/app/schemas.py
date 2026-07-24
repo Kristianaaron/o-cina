@@ -5,7 +5,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 # ── Agent ────────────────────────────────────────────────────────────────────
 
 class AgentCreate(BaseModel):
@@ -24,6 +23,8 @@ class AgentCreate(BaseModel):
 class AgentUpdate(BaseModel):
     name: str | None = None
     status: str | None = None
+    model: str | None = None
+    provider: str | None = None
     endpoint: str | None = None
     config: dict[str, Any] | None = None
     sandboxed: bool | None = None

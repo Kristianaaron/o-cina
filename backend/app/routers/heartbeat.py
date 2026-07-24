@@ -1,8 +1,10 @@
 """Agent heartbeat endpoint."""
 import time
-from pydantic import BaseModel
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
 from app.database import get_db
 from app.models import Agent, AgentStatus
 

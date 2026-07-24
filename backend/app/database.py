@@ -1,6 +1,7 @@
 """SQLite database setup with SQLAlchemy 2.0 + Alembic."""
 import os
 from pathlib import Path
+
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
@@ -8,10 +9,13 @@ CONFIG_DIR = Path(os.path.expanduser("~/.o-cina"))
 DATA_DIR = CONFIG_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    f"sqlite:///{DATA_DIR}/center.db"
-)
+_raw_db_url = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR}/center.db")
+# Expand ~ in sqlite paths (env files often use ~/...)
+if _raw_db_url.startswith("sqlite:///") and "~" in _raw_db_url:
+    _prefix, _path = _raw_db_url.split("sqlite:///", 1)
+    DATABASE_URL = f"sqlite:///{os.path.expanduser(_path)}"
+else:
+    DATABASE_URL = _raw_db_url
 
 # WAL mode for better concurrent read performance
 connect_args = {"check_same_thread": False} if "sqlite" in DATABASE_URL else {}

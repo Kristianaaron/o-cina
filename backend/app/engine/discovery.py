@@ -8,7 +8,7 @@ import logging
 import os
 import shutil
 import subprocess
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -19,16 +19,16 @@ class HarnessProbe:
     def __init__(
         self,
         harness_type: str,
-        bin_names: List[str],
-        config_paths: Optional[List[str]] = None,
-        port: Optional[int] = None,
+        bin_names: list[str],
+        config_paths: list[str] | None = None,
+        port: int | None = None,
     ):
         self.harness_type = harness_type
         self.bin_names = bin_names
         self.config_paths = config_paths or []
         self.port = port
 
-    def probe(self) -> Optional[Dict[str, Any]]:
+    def probe(self) -> dict[str, Any] | None:
         """Check if this harness is available on the system."""
         # Check for binary
         found_bin = None
@@ -95,10 +95,10 @@ DEFAULT_PROBES = [
 class DiscoveryScanner:
     """Scan for available harnesses and return results."""
 
-    def __init__(self, probes: Optional[List[HarnessProbe]] = None):
+    def __init__(self, probes: list[HarnessProbe] | None = None):
         self.probes = probes or DEFAULT_PROBES
 
-    def scan(self) -> List[Dict[str, Any]]:
+    def scan(self) -> list[dict[str, Any]]:
         """Run all probes and return discovered harnesses."""
         results = []
         for probe in self.probes:
@@ -111,7 +111,7 @@ class DiscoveryScanner:
                 logger.warning("Probe failed for %s: %s", probe.harness_type, e)
         return results
 
-    def scan_to_agents(self) -> List[Dict[str, Any]]:
+    def scan_to_agents(self) -> list[dict[str, Any]]:
         """Scan and convert results to agent registration payloads.
 
         Returns list of dicts suitable for POST /agents/register.

@@ -1,30 +1,33 @@
-From: O-cina Codebase Fixes
-Date: June 11, 2026
-Subject: Fix 23 identified issues (critical → optimization)
+# O-cina Codebase Fixes
 
-Summary of changes across 15 files + 1 deletion:
+## Round 2 — Mac/Linux hardening (Jul 2026)
 
-CRITICAL:
-  • workflows.py: BackgroundTasks → asyncio.create_task (async no-op fix)
-  • events.py: Full SSE rewrite with Queue-based broadcasting
-  • models.py: Consolidated from dual files (deleted models/ dir)
+Critical and high-priority fixes for cross-platform boot and functional correctness:
 
-HIGH:
-  • tasks.py: Dead PID logging fix (if False → or "unknown")
-  • projects.js: Hardcoded localhost:8002 → relative /api/v1
-  • projects.py: ChromaDB cleanup on project delete
-  • workflows.py: WorkflowUpdate schema for PATCH (optional fields)
+### P0 — Boot / cross-platform
+- Removed hardcoded `/home/kristianaaron/...` paths from `alembic.ini` and `scripts/migrate.sh`
+- Unified data dirs under `~/.o-cina/{data,logs,chroma}` (was split across `~/o-cina` and Linux home)
+- Aligned default port to **8002** (`OC_PORT` / `BACKEND_PORT` / `O_CINA_PORT`)
+- Added missing `./run` bootstrap script (Python 3.11+ detection; prefers 3.12)
+- Process manager: `start_new_session=True`, Homebrew PATH, macOS-safe RLIMIT skip, fixed `from_pid()` recovery (psutil had no `.poll()`)
 
-MEDIUM:
-  • auth.py: NEW — get_current_user/require_user deps, SHA-256 token hashing
-  • main.py: Auth dependency wired globally, Redis URL parsing, static mount fix
-  • sessions.py: N+1 query fix (correlated subquery), type_result→type, msg_type migration
-  • agents.py: Expanded AgentUpdate (model, provider, endpoint, sandbox)
-  • process_manager.py: from_pid() classmethod, dummy Popen removal
-  • prompt.py, message_router.py: .type → .msg_type
-  • database.py: pool_pre_ping conditional on SQLite
+### P1 — Functional
+- Alembic `002` no longer recreates tables already in `001` (fresh migrate works)
+- Workflow adapter dispatch uses `get_adapter()`; base `dispatch()` raises `NotImplementedError` for clean fallback
+- Hermes `default_skills` no longer shadows itself with a recursive method
+- Workflow PATCH handles nodes/edges independently (no `TypeError` when edges is `None`)
+- Celery beat task names match registered task names
+- Process reaper logs the real dead PID before clearing it
+- SSE `emit_event` is sync and wired from agent start/stop + workflow completion
+- Frontend: `/workflows/new` create flow, Vite proxies `/health` + WS, no hardcoded `:8002`
+- Test infra: session-scoped DB cleanup; pytest/httpx/ruff in requirements; CI on `master`
 
-OPTIMIZATIONS:
-  • agents.py: Pagination (limit/offset) on GET /agents
-  • main.py: Static files mounted at /app, SPA fallback with JSON 404 for API
-  • database.py: pool_pre_ping=False for SQLite
+### Still open (intentional / later)
+- Auth helpers exist but routes remain open for local dev — do not bind `0.0.0.0` without auth
+- Prompt endpoint still queues a pending task (no live agent chat completion yet)
+- Docker Chroma service is optional/profiled; API uses local PersistentClient
+- Fan-out workflow nodes still execute sequentially
+
+## Round 1 — Jun 11, 2026
+
+Summary of earlier changes across 15 files (BackgroundTasks→asyncio, SSE rewrite, model consolidation, etc.). Some claims in that pass did not match the code and were corrected above.

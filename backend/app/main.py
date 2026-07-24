@@ -3,7 +3,7 @@
 FastAPI application entry point.
 """
 import os
-import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,15 +12,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.database import engine, Base, SessionLocal
-from app.auth import get_current_user
-from app.routers import agents, workflows, projects, prompt, events, heartbeat, memory, sessions, terminal, tasks
-
 # Auto-register all adapters on startup
 from app import adapters  # noqa: F401 — triggers adapter registration
+from app.database import Base, SessionLocal, engine
 from app.engine import process_manager
 from app.engine.discovery import DiscoveryScanner
 from app.models import Agent, AgentStatus
+from app.routers import (
+    agents,
+    events,
+    heartbeat,
+    memory,
+    projects,
+    prompt,
+    sessions,
+    tasks,
+    terminal,
+    workflows,
+)
 
 # ── Config ──────────────────────────────────────────────────────────────────
 
@@ -108,8 +117,6 @@ app.add_middleware(
 
 # ── Request ID middleware ───────────────────────────────────────────────────
 
-import uuid
-
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
     request.state.request_id = str(uuid.uuid4())
@@ -121,12 +128,17 @@ async def add_request_id(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def unhandled_exception(request: Request, exc: Exception):
+    import logging
+    request_id = getattr(request.state, "request_id", "unknown")
+    logging.getLogger(__name__).exception("Unhandled error request_id=%s", request_id)
+    # Avoid leaking internals to clients; keep detail in debug mode only
+    detail = str(exc) if os.getenv("OC_DEBUG", "").lower() in ("1", "true", "yes") else "internal server error"
     return JSONResponse(
         status_code=500,
         content={
             "error": "internal_server_error",
-            "detail": str(exc),
-            "request_id": getattr(request.state, "request_id", "unknown"),
+            "detail": detail,
+            "request_id": request_id,
         },
     )
 
@@ -150,8 +162,9 @@ async def health():
 
     # Redis check
     try:
-        import redis
         from urllib.parse import urlparse
+
+        import redis
         redis_url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379")
         parsed = urlparse(redis_url)
         r = redis.Redis(

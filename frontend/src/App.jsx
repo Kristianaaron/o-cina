@@ -7,16 +7,19 @@ import WorkflowList from './pages/workflows/WorkflowList'
 import WorkflowEditor from './pages/workflows/WorkflowEditor'
 import ProjectList from './pages/projects/ProjectList'
 import ProjectDetail from './pages/projects/ProjectDetail'
+import TerminalHerdPage from './pages/terminals/TerminalHerdPage'
 
 function App() {
   const location = useLocation()
   const nav = [
     { label: 'Dashboard', path: '/' },
     { label: 'Agents', path: '/agents' },
+    { label: 'Herd', path: '/terminals' },
     { label: 'Workflows', path: '/workflows' },
     { label: 'Projects', path: '/projects' },
     { label: 'Prompt', path: '/prompt' },
   ]
+  const isHerd = location.pathname.startsWith('/terminals')
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans flex flex-col">
       <nav className="border-b border-zinc-800 bg-zinc-900/50">
@@ -30,14 +33,14 @@ function App() {
           ))}
         </div>
       </nav>
-      <main className="max-w-7xl mx-auto px-4 py-6 w-full flex-1">
+      <main className={`${isHerd ? 'max-w-none px-3 py-3' : 'max-w-7xl mx-auto px-4 py-6'} w-full flex-1 flex flex-col min-h-0`}>
         <ErrorBoundary>
           <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/agents" element={<AgentList />} />
           <Route path="/agents/:id" element={<AgentDetail />} />
+          <Route path="/terminals" element={<TerminalHerdPage />} />
           <Route path="/workflows" element={<WorkflowList />} />
-          <Route path="/workflows/new" element={<WorkflowEditor id="new" />} />
           <Route path="/workflows/:id" element={<WorkflowEditor />} />
           <Route path="/projects" element={<ProjectList />} />
           <Route path="/projects/:id" element={<ProjectDetail />} />
@@ -120,18 +123,18 @@ function Dashboard() {
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
         <h2 className="font-mono text-sm font-semibold text-zinc-300 mb-3">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
-          <a href="/agents" className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700 transition-colors"
-            onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/agents'); window.dispatchEvent(new PopStateEvent('popstate')) }}>
-            🤖 Manage Agents
-          </a>
-          <a href="/workflows" className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700 transition-colors"
-            onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/workflows'); window.dispatchEvent(new PopStateEvent('popstate')) }}>
-            🔀 Build Workflows
-          </a>
-          <a href="/projects" className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700 transition-colors"
-            onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/projects'); window.dispatchEvent(new PopStateEvent('popstate')) }}>
-            📁 Open Projects
-          </a>
+          <Link to="/agents" className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700 transition-colors">
+            Manage Agents
+          </Link>
+          <Link to="/terminals" className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700 transition-colors">
+            Open Terminal Herd
+          </Link>
+          <Link to="/workflows" className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700 transition-colors">
+            Build Workflows
+          </Link>
+          <Link to="/projects" className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700 transition-colors">
+            Open Projects
+          </Link>
         </div>
       </div>
     </div>

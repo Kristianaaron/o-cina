@@ -96,10 +96,11 @@ def reap_dead_processes():
         agents_with_pids = db.query(Agent).filter(Agent.pid.isnot(None)).all()
         reaped = 0
         for agent in agents_with_pids:
+            dead_pid = agent.pid
             try:
-                pgid = agent.pgid or agent.pid
-                _os.kill(pgid, 0)  # check if process group exists
-            except (OSError, NameError):
+                # Prefer checking the actual PID (pgid may differ after recovery)
+                _os.kill(agent.pid, 0)
+            except OSError:
                 # Process is dead
                 agent.status = AgentStatus.stopped
                 agent.pid = None
@@ -107,8 +108,8 @@ def reap_dead_processes():
                 agent.process_started_at = None
                 reaped += 1
                 logger.info(
-                    "Reaped dead agent %s (pid=%d was gone)",
-                    agent.id, agent.pid or "unknown",
+                    "Reaped dead agent %s (pid=%s was gone)",
+                    agent.id, dead_pid if dead_pid is not None else "unknown",
                 )
 
         if reaped:

@@ -2,34 +2,43 @@
 
 Visual orchestration layer for heterogeneous AI agents. Framework-agnostic. MIT licensed.
 
-**Phases 0–3 complete.** Backend operational with workflow engine, guardrails, semantic memory, and session management.
+Works on **macOS and Linux**.
 
 ## Architecture
 
 ```
-Frontend (React + Vite) → Backend (FastAPI) → Agents (Hermes, Pi, Claude Code, Codex, custom)
+Frontend (React + Vite) → Backend (FastAPI) → Agents (Hermes, Claude Code, Codex, custom)
                   ↕
-              Redis + Celery (task queue)
-              ChromaDB (semantic memory)
-              SQLite (structured data)
+              Redis + Celery (task queue, optional)
+              ChromaDB (local semantic memory under ~/.o-cina)
+              SQLite (structured data under ~/.o-cina)
 ```
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.11+ (3.12 recommended)
 - Node.js 20+
-- Redis (optional for task queue)
+- Redis (optional — needed for Celery heartbeat/reaper tasks)
 
-### Backend
+### One-command backend
+
+```bash
+chmod +x run scripts/*.sh
+./run
+```
+
+This creates `.venv`, installs backend deps, migrates the DB, and starts the API on `http://127.0.0.1:8002`.
+
+### Manual backend
 
 ```bash
 cd backend
-python -m venv ../.venv
+python3 -m venv ../.venv
 source ../.venv/bin/activate
 pip install -r requirements.txt
-alembic upgrade head
+../scripts/migrate.sh
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8002
 ```
 
@@ -38,24 +47,49 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8002
 ```bash
 cd frontend
 npm install
-npm run dev  # dev server on :3001
-# or
-npx vite build  # production build → dist/
+npm run dev   # http://localhost:3001 — proxies /api and /health to :8002
 ```
 
-### Or just run
+Production build (served by FastAPI under `/static`):
 
 ```bash
-# Project includes startup scripts
-chmod +x run
-./run
+cd frontend && npm run build
+# copy dist → backend/static if you want the backend to serve the UI
 ```
+
+### Optional Docker infra
+
+```bash
+docker compose up -d redis          # Redis only
+docker compose --profile full up -d # Redis + Celery worker (+ optional Chroma image)
+```
+
+> The backend uses a **local** Chroma PersistentClient at `~/.o-cina/data/chroma` by default. The Compose `chromadb` service is optional and not wired into the API yet.
+
+## Data directories (macOS + Linux)
+
+| Path | Purpose |
+|------|---------|
+| `~/.o-cina/data/center.db` | SQLite database |
+| `~/.o-cina/data/chroma` | ChromaDB collections |
+| `~/.o-cina/logs` | Agent process logs |
+
+Override with `DATABASE_URL`, `CHROMA_PERSIST_DIR`, `OCINA_LOG_DIR`.
+
+## Ports
+
+| Service | Default |
+|---------|---------|
+| Backend API | `8002` (`OC_PORT` / `BACKEND_PORT`) |
+| Frontend Vite | `3001` |
+| Redis | `6379` |
 
 ## API
 
-Docs at `http://localhost:8002/docs` (Swagger UI) when server is running.
+Docs at `http://localhost:8002/docs` when the server is running.
 
 Key endpoints:
+
 - `GET /health` — Health check
 - `GET /api/v1/agents` — List agents
 - `POST /api/v1/agents/register` — Register new agent
@@ -63,7 +97,11 @@ Key endpoints:
 - `POST /api/v1/workflows/{id}/execute` — Run workflow
 - `GET /api/v1/projects` — List projects
 - `POST /api/v1/projects/{id}/memories/search` — Semantic search
-- `GET /api/v1/sessions/{id}/messages` — Session messages
+- `GET /api/v1/events` — SSE event stream
+
+## Auth note
+
+`app/auth.py` provides API-key helpers, but routes are open by default for local development. Do **not** bind the API to `0.0.0.0` on an untrusted network without enabling auth.
 
 ## Tech Stack
 
@@ -77,54 +115,45 @@ Key endpoints:
 | Frontend State | Redux Toolkit |
 | Tests | pytest (backend), Vitest + RTL (frontend), Playwright (E2E) |
 
+## Testing
+
+```bash
+# Backend
+source .venv/bin/activate
+cd backend && pytest tests/ -v
+
+# Frontend
+cd frontend && npm test
+```
+
+## CLI
+
+```bash
+pip install -e .
+o-cina --help
+# or
+./bin/o-cina --help
+```
+
 ## Project Structure
 
 ```
 backend/
   app/
     engine/       # Workflow engine, guardrails, process manager
-    routers/      # FastAPI routers (agents, workflows, projects, memory, sessions)
+    routers/      # FastAPI routers
+    adapters/     # Harness adapters (Hermes, …)
     models.py     # SQLAlchemy models
     schemas.py    # Pydantic schemas
-    memory_store.py  # ChromaDB integration
+    memory_store.py
   alembic/        # Migrations
-  tests/          # Backend tests
-
+  tests/
 frontend/
   src/
-    api/          # API clients
-    pages/        # Page components
-    components/   # Shared components
-    lib/          # Redux store, utilities
-  e2e/            # Playwright E2E tests
-
-.env.example      # Environment config template
-README.md         # This file
+    api/
+    pages/
+    components/
+e2e/              # Playwright E2E tests
+scripts/          # start / stop / migrate
+run               # bootstrap + start
 ```
-
-## Testing
-
-```bash
-# Backend
-cd backend
-pytest tests/ -v --cov=app
-
-# Frontend
-cd frontend
-npx vitest run --config vite.config.test.js
-
-# E2E (requires running backend)
-npx playwright test e2e/
-```
-
-## Phases Completed
-
-- **Phase 0** — Foundation: Skeleton, data model, API, CI/CD
-- **Phase 1** — Registry & Lifecycle: Process mgmt, adapters, discovery, TTL
-- **Phase 2** — Workflow Builder: DAG engine, guardrails, message routing
-- **Phase 3** — Projects & Memory: Workspace, semantic search, sessions
-- **Phase 4** — Polish & Launch: Tests, CI, error handling, production config
-
-## License
-
-MIT

@@ -9,19 +9,16 @@ Protocol: bidirectional JSON messages
 """
 
 import asyncio
+import fcntl
 import logging
 import os
 import pty
-import select
+import pwd
 import signal
 import struct
 import termios
-import fcntl
-import pwd
 
-from typing import Optional
-
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -42,7 +39,7 @@ def _set_nonblocking(fd: int) -> None:
     fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
 
-def _spawn_shell(agent_id: str, workdir: Optional[str] = None) -> tuple[int, int]:
+def _spawn_shell(agent_id: str, workdir: str | None = None) -> tuple[int, int]:
     """Spawn a PTY with a login shell.
 
     Returns (child_pid, master_fd).
@@ -239,7 +236,7 @@ async def agent_terminal(
 
     except WebSocketDisconnect:
         log.info("Terminal disconnected for agent %s", agent_id)
-    except Exception as e:
+    except Exception:
         log.exception("Terminal error for agent %s", agent_id)
     finally:
         # Cleanup

@@ -1,12 +1,12 @@
 """Projects CRUD endpoints."""
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+
 from app.database import get_db
 from app.memory_store import memory_store
 from app.models import Project
-from app.schemas import ProjectCreate, ProjectUpdate, ProjectOut
+from app.schemas import ProjectCreate, ProjectOut, ProjectUpdate
 
 router = APIRouter()
 
@@ -22,8 +22,8 @@ def create_project(proj: ProjectCreate, db: Session = Depends(get_db)):
 
 @router.get("/projects")
 def list_projects(
-    tag: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    tag: str | None = Query(None),
+    search: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
     q = db.query(Project)

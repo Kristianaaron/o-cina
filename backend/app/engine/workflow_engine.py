@@ -2,16 +2,14 @@
 import asyncio
 import logging
 import time
-import uuid
 from collections import deque
-from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.engine.guardrails import GuardrailEngine, GuardrailViolation
 from app.engine.message_router import MessageRouter
-from app.models import Task, Workflow, WorkflowNode, WorkflowEdge, Message, Agent
+from app.models import Agent, Task, Workflow, WorkflowEdge, WorkflowNode
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +88,6 @@ class WorkflowEngine:
             .all()
         )
 
-        node_refs = {n.ref_id for n in nodes}
         in_degree: dict[str, int] = {n.ref_id: 0 for n in nodes}
         adj: dict[str, list[str]] = {n.ref_id: [] for n in nodes}
 
@@ -319,6 +316,16 @@ class WorkflowEngine:
         task.updated_at = time.time()
         db.commit()
 
+        try:
+            from app.routers.events import emit_event
+            emit_event("workflow.progress", {
+                "task_id": task_id,
+                "workflow_id": task.workflow_id,
+                "status": "completed",
+            })
+        except Exception:
+            pass
+
         logger.info("Task %s completed successfully", task_id)
 
     async def _execute_node(
@@ -360,26 +367,30 @@ class WorkflowEngine:
 
         logger.info("Dispatching to agent %s (%s)", node.ref_id, agent.name)
 
-        # Try adapter dispatch
+        # Try adapter live dispatch when implemented
         try:
-            from app.adapters.base import adapter_registry
-            adapter = adapter_registry.get(agent.harness)
-            if adapter:
-                result = await adapter.dispatch(
-                    agent=agent,
-                    prompt=full_prompt,
-                    context=context,
-                )
-                return {
-                    "node": node.ref_id,
-                    "agent": agent.name,
-                    "status": "completed",
-                    "output": result,
-                }
+            from app.adapters.base import get_adapter
+
+            adapter = get_adapter(agent.harness or "")
+            if adapter is not None:
+                try:
+                    result = await adapter.dispatch(
+                        agent=agent,
+                        prompt=full_prompt,
+                        context=context,
+                    )
+                    return {
+                        "node": node.ref_id,
+                        "agent": agent.name,
+                        "status": "completed",
+                        "output": result,
+                    }
+                except NotImplementedError:
+                    pass
         except Exception as exc:
             logger.warning("Adapter dispatch failed for %s: %s", agent.name, exc)
 
-        # Fallback: record message and return placeholder
+        # Fallback: record message for the agent harness to consume
         msg = message_router.send(
             task_id=task_id,
             from_agent_id=None,
@@ -393,7 +404,7 @@ class WorkflowEngine:
             "agent": agent.name,
             "status": "dispatched",
             "message_id": msg.id,
-            "note": "Agent dispatch pending — no adapter available",
+            "note": "Agent dispatch pending — no live adapter dispatch available",
         }
 
     async def _execute_decision_node(

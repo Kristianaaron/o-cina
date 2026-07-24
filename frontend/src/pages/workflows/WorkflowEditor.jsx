@@ -14,7 +14,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import {
-  getWorkflow, updateWorkflow, validateWorkflow, executeWorkflow,
+  getWorkflow, createWorkflow, updateWorkflow, validateWorkflow, executeWorkflow,
   listTasks, getTaskStatus, stopTask, approveTask,
 } from '../../api/workflows'
 import { api } from '../../api/agents'
@@ -77,10 +77,12 @@ const DEFAULT_LAYOUT = [
 export default function WorkflowEditor() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const isNew = id === 'new'
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [agents, setAgents] = useState([])
   const [wf, setWf] = useState(null)
+  const [workflowId, setWorkflowId] = useState(isNew ? null : id)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
@@ -94,20 +96,33 @@ export default function WorkflowEditor() {
   const taskPollRef = useRef(null)
   const nextPosRef = useRef(0)
 
-  // Load workflow
+  // Load workflow (or empty draft for /workflows/new)
   const loadWorkflow = useCallback(async () => {
     try {
-      const data = await getWorkflow(id)
       const allAgents = await api.listAgents()
       const agentMap = {}
       for (const a of (allAgents.agents || [])) {
         agentMap[a.id] = a.name
       }
-
       setAgents(allAgents.agents || [])
-      setWf(data.workflow)
 
-      // Convert DB nodes to React Flow nodes
+      if (isNew) {
+        setWf({
+          name: 'Untitled Workflow',
+          description: '',
+          guardrails: { max_iterations: 10, timeout_per_task: 1800 },
+        })
+        setNodes([])
+        setEdges([])
+        setWorkflowId(null)
+        nextPosRef.current = 0
+        return
+      }
+
+      const data = await getWorkflow(id)
+      setWf(data.workflow)
+      setWorkflowId(data.workflow?.id || id)
+
       const positions = DEFAULT_LAYOUT
       const flowNodes = (data.nodes || []).map((n, i) => ({
         id: n.ref_id,
@@ -141,7 +156,7 @@ export default function WorkflowEditor() {
     } finally {
       setLoading(false)
     }
-  }, [id])
+  }, [id, isNew, setNodes, setEdges])
 
   useEffect(() => { loadWorkflow() }, [loadWorkflow])
 
@@ -217,29 +232,40 @@ export default function WorkflowEditor() {
 
   // ── Save ─────────────────────────────────────────────────────────
 
+  const buildPayload = () => ({
+    name: wf?.name || 'Untitled Workflow',
+    description: wf?.description || '',
+    guardrails: wf?.guardrails || { max_iterations: 10, timeout_per_task: 1800 },
+    nodes: nodes.map((n) => ({
+      ref_id: n.data.ref_id,
+      agent_id: n.data.agent_id || null,
+      node_type: n.data.node_type,
+      config: n.data.config || {},
+    })),
+    edges: edges.map((e) => ({
+      source_ref: e.source,
+      target_ref: e.target,
+      label: e.label || null,
+      data_rules: e.data_rules || {},
+    })),
+  })
+
   const handleSave = async () => {
     setSaving(true)
     try {
-      const payload = {
-        name: wf?.name || 'Untitled',
-        description: wf?.description || '',
-        guardrails: wf?.guardrails || { max_iterations: 10, timeout_per_task: 1800 },
-        nodes: nodes.map((n) => ({
-          ref_id: n.data.ref_id,
-          agent_id: n.data.agent_id || null,
-          node_type: n.data.node_type,
-          config: n.data.config || {},
-        })),
-        edges: edges.map((e) => ({
-          source_ref: e.source,
-          target_ref: e.target,
-          label: e.label || null,
-          data_rules: e.data_rules || {},
-        })),
+      const payload = buildPayload()
+      if (!workflowId) {
+        const created = await createWorkflow(payload)
+        setWf(created)
+        setWorkflowId(created.id)
+        navigate(`/workflows/${created.id}`, { replace: true })
+        return created.id
       }
-      await updateWorkflow(id, payload)
+      await updateWorkflow(workflowId, payload)
+      return workflowId
     } catch (e) {
       alert(e.message)
+      return null
     } finally {
       setSaving(false)
     }
@@ -251,9 +277,9 @@ export default function WorkflowEditor() {
     setValidating(true)
     setValidation(null)
     try {
-      // Save first to persist nodes/edges
-      await handleSave()
-      const result = await validateWorkflow(id)
+      const savedId = await handleSave()
+      if (!savedId) return
+      const result = await validateWorkflow(savedId)
       setValidation(result)
     } catch (e) {
       setValidation({ valid: false, error: e.message })
@@ -266,10 +292,12 @@ export default function WorkflowEditor() {
 
   const handleExecute = async () => {
     try {
-      const result = await executeWorkflow(id, {})
+      const savedId = workflowId || await handleSave()
+      if (!savedId) return
+      const result = await executeWorkflow(savedId, {})
       setTaskId(result.task_id)
       setTaskStatus(result.status)
-      startPolling(id, result.task_id)
+      startPolling(savedId, result.task_id)
     } catch (e) {
       alert(e.message)
     }
@@ -305,7 +333,8 @@ export default function WorkflowEditor() {
 
   const handleStop = async () => {
     try {
-      await stopTask(id, taskId)
+      if (!workflowId || !taskId) return
+      await stopTask(workflowId, taskId)
       setTaskStatus((s) => ({ ...s, status: 'cancelled' }))
       if (taskPollRef.current) {
         clearInterval(taskPollRef.current)
@@ -318,7 +347,8 @@ export default function WorkflowEditor() {
 
   const handleApprove = async () => {
     try {
-      await approveTask(id, taskId)
+      if (!workflowId || !taskId) return
+      await approveTask(workflowId, taskId)
     } catch (e) {
       alert(e.message)
     }

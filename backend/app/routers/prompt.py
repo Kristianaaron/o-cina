@@ -1,13 +1,12 @@
 """Direct agent prompting + streaming endpoints."""
-import uuid
-import time
-from typing import Optional
-from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
 from app.database import get_db
-from app.models import Task, Message, Session as DBSession, Agent
+from app.models import Agent, Message, Task
+from app.models import Session as DBSession
 
 router = APIRouter()
 
@@ -16,7 +15,7 @@ class PromptRequest(BaseModel):
     agent_id: str
     prompt: str
     context: dict = {}
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
 
 @router.post("/prompt", status_code=202)

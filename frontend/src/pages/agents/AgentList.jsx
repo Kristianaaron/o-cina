@@ -78,14 +78,22 @@ export default function AgentListPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="font-mono text-2xl font-semibold">Agents</h1>
-        <button
-          onClick={() => setShowRegister(!showRegister)}
-          className="px-3 py-1.5 text-sm bg-zinc-800 hover:bg-zinc-700 rounded border border-zinc-700 font-mono"
-        >
-          {showRegister ? 'Cancel' : '+ Register Agent'}
-        </button>
+        <div className="flex gap-2">
+          <Link
+            to="/terminals"
+            className="px-3 py-1.5 text-sm bg-zinc-900 hover:bg-zinc-800 rounded border border-zinc-700 font-mono text-zinc-300"
+          >
+            Open Herd
+          </Link>
+          <button
+            onClick={() => setShowRegister(!showRegister)}
+            className="px-3 py-1.5 text-sm bg-zinc-800 hover:bg-zinc-700 rounded border border-zinc-700 font-mono"
+          >
+            {showRegister ? 'Cancel' : '+ Register Agent'}
+          </button>
+        </div>
       </div>
 
       {/* Register form */}

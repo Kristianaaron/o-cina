@@ -1,12 +1,10 @@
 """Message router — route messages between workflow nodes per edge data_rules."""
 import logging
 import time
-import uuid
-from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models import Message, WorkflowEdge, WorkflowNode
+from app.models import Message, WorkflowEdge
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +64,8 @@ class MessageRouter:
     def send(
         self,
         task_id: str,
-        from_agent_id: Optional[str],
-        to_agent_id: Optional[str],
+        from_agent_id: str | None,
+        to_agent_id: str | None,
         message_type: str,
         payload: dict,
         db: Session,

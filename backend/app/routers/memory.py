@@ -1,15 +1,14 @@
 """Memory CRUD and semantic search endpoints."""
 import time
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import MemoryEntry, Project
 from app.memory_store import memory_store
+from app.models import MemoryEntry, Project
 
 router = APIRouter()
 
@@ -20,20 +19,20 @@ class MemoryCreate(BaseModel):
     content: str = Field(..., min_length=1, description="Memory text content")
     source: str = Field(default="user", description="Source: user, agent, system, workflow")
     tags: list[str] = Field(default_factory=list, description="Tags for filtering")
-    session_id: Optional[str] = Field(None, description="Associate with a session")
-    agent_id: Optional[str] = Field(None, description="Associate with an agent")
+    session_id: str | None = Field(None, description="Associate with a session")
+    agent_id: str | None = Field(None, description="Associate with an agent")
 
 
 class MemoryUpdate(BaseModel):
-    content: Optional[str] = None
-    tags: Optional[list[str]] = None
+    content: str | None = None
+    tags: list[str] | None = None
 
 
 class MemorySearch(BaseModel):
     query: str = Field(..., min_length=1, description="Search query text")
     top_k: int = Field(5, ge=1, le=20, description="Number of results")
-    source: Optional[str] = Field(None, description="Filter by source")
-    tags: Optional[list[str]] = Field(None, description="Filter by tags")
+    source: str | None = Field(None, description="Filter by source")
+    tags: list[str] | None = Field(None, description="Filter by tags")
 
 
 class MemoryOut(BaseModel):
@@ -45,7 +44,7 @@ class MemoryOut(BaseModel):
     metadata: dict = {}
     tags: list = []
     created_at: float
-    updated_at: Optional[float] = None
+    updated_at: float | None = None
 
     model_config = {"from_attributes": True}
 
@@ -118,7 +117,7 @@ def create_memory(project_id: str, body: MemoryCreate, db: Session = Depends(get
 @router.get("/projects/{project_id}/memories")
 def list_memories(
     project_id: str,
-    source: Optional[str] = Query(None, description="Filter by source"),
+    source: str | None = Query(None, description="Filter by source"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -139,7 +138,7 @@ def list_memories(
 @router.get("/projects/{project_id}/memories/count")
 def memory_count(
     project_id: str,
-    source: Optional[str] = Query(None),
+    source: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
     """Count memories in a project."""

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 
-const API_BASE = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8002`
+// Same-origin by default (Vite proxies /api → backend). Override with VITE_API_URL if needed.
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 export default function AgentChat({
   agentId,
