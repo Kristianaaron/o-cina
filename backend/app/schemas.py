@@ -194,7 +194,7 @@ class MessageOut(BaseModel):
     session_id: str | None = None
     from_agent: str | None = None
     to_agent: str | None = None
-    type: str = "text"
+    msg_type: str = "text"
     payload: dict[str, Any] = {}
     schema_version: int = 1
     timestamp: float | None = None

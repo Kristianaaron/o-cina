@@ -8,8 +8,9 @@ import {
   useNodesState,
   useEdgesState,
   addEdge,
-  useReactFlow,
   Panel,
+  Handle,
+  Position,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import {
@@ -44,6 +45,7 @@ function WorkflowNode({ data }) {
     }`}
       style={{ background: style.bg, borderColor: style.border, color: style.text }}
     >
+      <Handle type="target" position={Position.Left} style={{ background: style.border }} />
       <div className="flex items-center gap-2">
         <span>{style.icon}</span>
         <span className="font-semibold">{data.ref_id}</span>
@@ -54,6 +56,7 @@ function WorkflowNode({ data }) {
           ● {data.status}
         </div>
       )}
+      <Handle type="source" position={Position.Right} style={{ background: style.border }} />
     </div>
   )
 }
@@ -87,9 +90,9 @@ export default function WorkflowEditor() {
   const [configData, setConfigData] = useState({})
   const [taskId, setTaskId] = useState(null)
   const [taskStatus, setTaskStatus] = useState(null)
+  const [draftSaved, setDraftSaved] = useState(false)
   const taskPollRef = useRef(null)
   const nextPosRef = useRef(0)
-  const { project } = useReactFlow()
 
   // Load workflow
   const loadWorkflow = useCallback(async () => {
@@ -166,7 +169,7 @@ export default function WorkflowEditor() {
     setNodes((prev) => [...prev, {
       id: refId,
       type: 'workflow',
-      position: project(pos),
+      position: pos,
       data: {
         ref_id: refId,
         node_type: type,
@@ -328,10 +331,15 @@ export default function WorkflowEditor() {
       {/* Top bar */}
       <div className="flex items-center justify-between mb-3 shrink-0">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/workflows')} className="text-zinc-500 hover:text-white text-sm">
-            ← Back
+          <button onClick={() => {
+            if (confirm('Are you sure you want to cancel? This workflow will not be saved.')) {
+              navigate('/workflows')
+            }
+          }} className="text-red-400 hover:text-red-300 text-sm">
+            ✕ Cancel
           </button>
           <h1 className="font-mono text-lg font-semibold">{wf?.name}</h1>
+          {draftSaved && <span className="text-xs text-zinc-500 font-mono">Draft saved</span>}
           {taskStatus && (
             <span className={`text-xs font-mono px-2 py-0.5 rounded ${
               taskStatus.status === 'completed' ? 'bg-emerald-900/50 text-emerald-400' :
@@ -354,8 +362,16 @@ export default function WorkflowEditor() {
             {validating ? 'Validating…' : 'Validate DAG'}
           </button>
           <button onClick={handleSave} disabled={saving}
-            className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded border border-zinc-700 transition-colors disabled:opacity-50">
+            className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 rounded transition-colors disabled:opacity-50">
             {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button onClick={async () => {
+            setDraftSaved(false)
+            await handleSave()
+            setDraftSaved(true)
+            setTimeout(() => setDraftSaved(false), 3000)
+          }} className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded border border-zinc-700 transition-colors">
+            💾 Save as Draft
           </button>
           {!taskStatus && (
             <button onClick={handleExecute}

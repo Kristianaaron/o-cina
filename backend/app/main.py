@@ -7,14 +7,14 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.database import engine, Base, SessionLocal
 from app.auth import get_current_user
-from app.routers import agents, workflows, projects, prompt, events, heartbeat, memory, sessions
+from app.routers import agents, workflows, projects, prompt, events, heartbeat, memory, sessions, terminal, tasks
 
 # Auto-register all adapters on startup
 from app import adapters  # noqa: F401 — triggers adapter registration
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
     log = logging.getLogger(__name__)
 
     # Startup: create tables if not using Alembic (dev mode)
-    if not os.getenv("ALEMBIC_MODE", "true"):
+    if os.getenv("ALEMBIC_MODE", "true").lower() == "false":
         Base.metadata.create_all(bind=engine)
         # Seed default admin user
         db = SessionLocal()
@@ -95,7 +95,6 @@ app = FastAPI(
     title="O-cina Agent Command Center",
     version=VERSION,
     lifespan=lifespan,
-    dependencies=[Depends(get_current_user)],
 )
 
 # CORS — allow frontend dev server
@@ -208,26 +207,37 @@ app.include_router(sessions.router, prefix="/api/v1", tags=["sessions"])
 app.include_router(prompt.router, prefix="/api/v1", tags=["prompt"])
 app.include_router(events.router, prefix="/api/v1", tags=["events"])
 app.include_router(heartbeat.router, prefix="/api/v1", tags=["heartbeat"])
+app.include_router(terminal.router, prefix="/api/v1", tags=["terminal"])
+app.include_router(tasks.router, prefix="/api/v1", tags=["tasks"])
 
 
 # ── Mount static files (frontend build output) ──────────────────────────────
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 if STATIC_DIR.exists():
-    # Mount at /app to avoid catching API routes
-    app.mount("/app", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 
 
-# ── Catch-all for SPA routing ──────────────────────────────────────────────
+# ── SPA fallback: serve index.html for client-side routes ───────────────────
 
 
-@app.get("/{catchall:path}")
-async def spa_fallback(catchall: str):
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str):
     """Serve index.html for SPA routes; return JSON 404 for unknown API paths."""
-    from fastapi.responses import FileResponse
-    if catchall.startswith("api/"):
+    if full_path.startswith("api/"):
         return JSONResponse({"detail": "Not Found"}, status_code=404)
     index = STATIC_DIR / "index.html"
     if index.exists():
-        return FileResponse(str(index))
+        return FileResponse(str(index), media_type="text/html")
+    return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+
+@app.exception_handler(404)
+async def not_found_handler(request: Request, exc):
+    """Return JSON 404 for API routes."""
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    index = STATIC_DIR / "index.html"
+    if index.exists():
+        return FileResponse(str(index), media_type="text/html")
     return JSONResponse({"detail": "Not Found"}, status_code=404)

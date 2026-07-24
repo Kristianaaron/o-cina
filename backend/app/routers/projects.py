@@ -1,40 +1,14 @@
 """Projects CRUD endpoints."""
 from typing import Optional
-from pydantic import BaseModel
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.memory_store import memory_store
 from app.models import Project
+from app.schemas import ProjectCreate, ProjectUpdate, ProjectOut
 
 router = APIRouter()
-
-
-class ProjectCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    tags: list[str] = []
-    agent_ids: list[str] = []
-    workflow_id: Optional[str] = None
-
-class ProjectUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    tags: Optional[list[str]] = None
-    agent_ids: Optional[list[str]] = None
-    workflow_id: Optional[str] = None
-
-class ProjectOut(BaseModel):
-    id: str
-    name: str
-    description: Optional[str]
-    tags: list
-    agent_ids: list
-    workflow_id: Optional[str]
-    created_at: float
-    updated_at: float
-
-    model_config = {"from_attributes": True}
 
 
 @router.post("/projects", status_code=201)

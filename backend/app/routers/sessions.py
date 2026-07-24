@@ -49,7 +49,7 @@ class MessageOut(BaseModel):
     session_id: Optional[str] = None
     from_agent: Optional[str] = None
     to_agent: Optional[str] = None
-    type: str = "text"
+    msg_type: str = "text"
     payload: dict = {}
     timestamp: float
     agent_name: Optional[str] = None
@@ -227,7 +227,7 @@ def add_message(session_id: str, body: MessageCreate, db: Session = Depends(get_
         session_id=msg.session_id,
         from_agent=msg.from_agent,
         to_agent=msg.to_agent,
-        type=msg.msg_type,
+        msg_type=msg.msg_type,
         payload=msg.payload,
         timestamp=msg.timestamp,
     )
@@ -254,23 +254,24 @@ def list_messages(
         .all()
     )
 
+    # Build agent name lookup (eager-load, avoids N+1)
+    agent_ids = {m.from_agent for m in messages if m.from_agent}
+    agent_names = {}
+    if agent_ids:
+        agents = db.query(Agent).filter(Agent.id.in_(agent_ids)).all()
+        agent_names = {a.id: a.name for a in agents}
+
     results = []
     for m in messages:
-        agent_name = None
-        if m.from_agent:
-            agent = db.query(Agent).filter(Agent.id == m.from_agent).first()
-            if agent:
-                agent_name = agent.name
-
         results.append(MessageOut(
             id=m.id,
             session_id=m.session_id,
             from_agent=m.from_agent,
             to_agent=m.to_agent,
-            type=m.msg_type,
+            msg_type=m.msg_type,
             payload=m.payload,
             timestamp=m.timestamp,
-            agent_name=agent_name,
+            agent_name=agent_names.get(m.from_agent) if m.from_agent else None,
         ))
 
     return {"messages": results, "total": len(results)}
@@ -329,11 +330,11 @@ def search_sessions(
         message_results.append({
             "id": m.id,
             "session_id": m.session_id,
-            "type": m.msg_type,
+            "msg_type": m.msg_type,
             "payload": m.payload,
             "timestamp": m.timestamp,
             "from_agent": m.from_agent,
-            "type": "message",
+            "kind": "message",
         })
 
     return {

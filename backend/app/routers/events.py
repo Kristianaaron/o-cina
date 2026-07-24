@@ -25,11 +25,13 @@ async def events_stream(last_event_id: str = ""):
             # Initial ping
             yield f"event: connected\ndata: {json.dumps({'message': 'connected'})}\n\n"
             while True:
-                message = await asyncio.wait_for(queue.get(), timeout=30)
-                yield message
-        except asyncio.TimeoutError:
-            # Send keepalive comment every 30s
-            yield ": keepalive\n\n"
+                try:
+                    message = await asyncio.wait_for(queue.get(), timeout=30)
+                    yield message
+                except asyncio.TimeoutError:
+                    # Send keepalive comment every 30s
+                    yield ": keepalive\n\n"
+                    continue
         except asyncio.CancelledError:
             pass
         finally:

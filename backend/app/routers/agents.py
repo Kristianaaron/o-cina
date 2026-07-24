@@ -6,67 +6,21 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.adapters.base import get_adapter, list_adapters
 from app.database import get_db
 from app.engine import process_manager
 from app.models import Agent, AgentStatus
+from app.schemas import AgentCreate, AgentUpdate, AgentOut
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-# ── Pydantic schemas ────────────────────────────────────────────────────────
-
-class AgentCreate(BaseModel):
-    name: str
-    harness: str
-    model: Optional[str] = None
-    provider: Optional[str] = None
-    skills: list[str] = []
-    endpoint: Optional[str] = None
-    config: dict = {}
-    sandboxed: bool = False
-    sandbox_config: Optional[dict] = None
-    resource_limits: Optional[dict] = None
-
-
-class AgentUpdate(BaseModel):
-    name: Optional[str] = None
-    model: Optional[str] = None
-    provider: Optional[str] = None
-    skills: Optional[list[str]] = None
-    config: Optional[dict] = None
-    endpoint: Optional[str] = None
-    sandboxed: Optional[bool] = None
-    sandbox_config: Optional[dict] = None
-    resource_limits: Optional[dict] = None
-
-
-class AgentOut(BaseModel):
-    id: str
-    name: str
-    harness: str
-    model: Optional[str]
-    provider: Optional[str]
-    skills: list
-    status: str
-    endpoint: Optional[str]
-    config: dict
-    last_heartbeat: Optional[float]
-    pid: Optional[int]
-    pgid: Optional[int]
-    process_started_at: Optional[float]
-    sandboxed: bool
-    sandbox_config: Optional[dict]
-    resource_limits: Optional[dict]
-    created_at: float
-
-    model_config = {"from_attributes": True}
-
+# ── Adapter schema (not duplicated in schemas.py) ────────────────────────────
 
 class AdapterOut(BaseModel):
     harness_type: str

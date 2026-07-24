@@ -5,6 +5,8 @@ import {
   fetchAgent, startAgent, stopAgent, restartAgent, deleteAgent,
   fetchAgentMetrics, fetchAgentLogs, clearSelected
 } from '../../lib/store/agentsSlice'
+import AgentChat from '../../components/AgentChat'
+import AgentTerminal from '../../components/AgentTerminal'
 
 const STATUS_COLORS = {
   registered: 'bg-zinc-700 text-zinc-300',
@@ -46,8 +48,13 @@ export default function AgentDetailPage() {
   const loading = useSelector(state => state.agents.loading)
   const actionInProgress = useSelector(state => state.agents.actionInProgress)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [activeTab, setActiveTab] = useState('logs') // 'logs' | 'config'
+  const [activeTab, setActiveTab] = useState('chat') // 'chat' | 'logs' | 'config'
+  const [terminalView, setTerminalView] = useState(false) // toggle terminal overlay
   const logsRef = useRef(null)
+
+  // Shared message state between Chat and Terminal
+  const [sharedMessages, setSharedMessages] = useState([])
+  const [sharedSessionId, setSharedSessionId] = useState(null)
 
   // Fetch agent on mount
   useEffect(() => {
@@ -231,12 +238,12 @@ export default function AgentDetailPage() {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs — chat is primary, terminal is a toggle within chat */}
       <div className="flex gap-1 border-b border-zinc-800">
-        {['logs', 'config'].map(tab => (
+        {['chat', 'logs', 'config'].map(tab => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => { setActiveTab(tab); if (tab !== 'chat') setTerminalView(false) }}
             className={`px-4 py-2 text-sm font-mono border-b-2 transition-colors ${
               activeTab === tab
                 ? 'border-zinc-200 text-zinc-100'
@@ -248,7 +255,32 @@ export default function AgentDetailPage() {
         ))}
       </div>
 
-      {/* Tab content */}
+      {/* Tab content — both chat and terminal stay mounted, CSS toggles visibility */}
+      {activeTab === 'chat' && (
+        <div className="relative" style={{ minHeight: '400px' }}>
+          <div className={terminalView ? 'hidden' : ''}>
+            <AgentChat
+              agentId={agent.id}
+              agentName={agent.name}
+              externalMessages={sharedMessages}
+              onMessagesChange={setSharedMessages}
+              externalSessionId={sharedSessionId}
+              onSessionIdChange={setSharedSessionId}
+              onToggleTerminal={() => setTerminalView(true)}
+            />
+          </div>
+          <div className={terminalView ? '' : 'hidden'}>
+            <AgentTerminal
+              agentId={agent.id}
+              agentName={agent.name}
+              externalMessages={sharedMessages}
+              onMessagesChange={setSharedMessages}
+              onExitTerminal={() => setTerminalView(false)}
+            />
+          </div>
+        </div>
+      )}
+
       {activeTab === 'logs' && (
         <div
           ref={logsRef}

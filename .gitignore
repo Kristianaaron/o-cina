@@ -4,6 +4,8 @@ __pycache__/
 .env
 data/
 celerybeat-schedule
+*.db
+*.egg-info/
 node_modules/
 dist/
 .DS_Store

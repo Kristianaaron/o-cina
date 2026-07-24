@@ -212,7 +212,7 @@ class WorkflowEngine:
             raise ValueError(f"Workflow {task.workflow_id} not found")
 
         guardrails = workflow.guardrails or {}
-        task.created_at = task.created_at or time.time()
+        task.updated_at = time.time()
 
         # Validate DAG
         self.validate_dag(task.workflow_id, db)
