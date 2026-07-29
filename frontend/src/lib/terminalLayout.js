@@ -122,6 +122,7 @@ export function herdState(status) {
 }
 
 const STORAGE_KEY = 'ocina.terminalHerd.v1'
+const WORKSPACE_KEY = 'ocina.terminalWorkspaces.v1'
 
 export function loadLayout() {
   try {
@@ -139,4 +140,73 @@ export function saveLayout(tree, focusedId) {
   } catch {
     // ignore
   }
+}
+
+/** cmux / Herdr-style named workspace (saved pane layout). */
+export function createWorkspace(name = 'Workspace', tree = null, focusedId = null) {
+  const root = tree || createLeaf(null)
+  return {
+    id: nextPaneId('ws'),
+    name: String(name || 'Workspace').trim() || 'Workspace',
+    tree: root,
+    focusedId: focusedId || firstLeafId(root),
+    updatedAt: Date.now(),
+  }
+}
+
+export function loadWorkspaces() {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_KEY)
+    if (raw) {
+      const data = JSON.parse(raw)
+      if (data?.workspaces?.length) {
+        return {
+          activeId: data.activeId || data.workspaces[0].id,
+          workspaces: data.workspaces,
+        }
+      }
+    }
+  } catch {
+    // fall through to migrate
+  }
+
+  // Migrate legacy single-layout storage into a default workspace
+  const legacy = loadLayout()
+  const ws = createWorkspace(
+    'Default',
+    legacy?.tree || createLeaf(null),
+    legacy?.focusedId || null,
+  )
+  const state = { activeId: ws.id, workspaces: [ws] }
+  saveWorkspaces(state)
+  return state
+}
+
+export function saveWorkspaces(state) {
+  try {
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify(state))
+    const active = state.workspaces.find((w) => w.id === state.activeId)
+    if (active) saveLayout(active.tree, active.focusedId)
+  } catch {
+    // ignore
+  }
+}
+
+export function getActiveWorkspace(state) {
+  if (!state?.workspaces?.length) return null
+  return state.workspaces.find((w) => w.id === state.activeId) || state.workspaces[0]
+}
+
+export function upsertActiveWorkspace(state, patch) {
+  const active = getActiveWorkspace(state)
+  if (!active) return state
+  const next = {
+    ...state,
+    workspaces: state.workspaces.map((w) => (
+      w.id === active.id
+        ? { ...w, ...patch, updatedAt: Date.now() }
+        : w
+    )),
+  }
+  return next
 }

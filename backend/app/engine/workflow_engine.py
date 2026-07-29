@@ -365,6 +365,31 @@ class WorkflowEngine:
         if not full_prompt:
             full_prompt = context.get("result", {}).get("output", "Continue workflow")
 
+        # Shared project memory bank → Claude-style tags (cross-chat continuity)
+        project_id = context.get("project_id") or node.config.get("project_id")
+        if project_id:
+            try:
+                from app.memory_context import attach_memory_context
+                from app.memory_store import memory_store
+                from app.models import Project
+
+                project = db.query(Project).filter(Project.id == project_id).first()
+                pack = attach_memory_context(
+                    memory_store=memory_store,
+                    project_id=project_id,
+                    prompt=full_prompt,
+                    project_name=project.name if project else None,
+                )
+                if pack["memory_count"]:
+                    full_prompt = pack["augmented_prompt"]
+                    context = {
+                        **context,
+                        "memory_count": pack["memory_count"],
+                        "memory_ids": [m.get("id") for m in pack["memories"]],
+                    }
+            except Exception as exc:
+                logger.warning("Memory bank attach failed for project %s: %s", project_id, exc)
+
         logger.info("Dispatching to agent %s (%s)", node.ref_id, agent.name)
 
         # Try adapter live dispatch when implemented

@@ -3,10 +3,16 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import {
   fetchAgent, startAgent, stopAgent, restartAgent, deleteAgent,
-  fetchAgentMetrics, fetchAgentLogs, clearSelected
+  fetchAgentMetrics, fetchAgentLogs,
 } from '../../lib/store/agentsSlice'
 import AgentChat from '../../components/AgentChat'
 import AgentTerminal from '../../components/AgentTerminal'
+import {
+  agentAvatarUrl,
+  formatUptime,
+  isAgentLive,
+  shortLabel,
+} from '../../lib/agentField'
 
 const STATUS_COLORS = {
   registered: 'bg-zinc-700 text-zinc-300',
@@ -49,7 +55,7 @@ export default function AgentDetailPage() {
   const actionInProgress = useSelector(state => state.agents.actionInProgress)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [activeTab, setActiveTab] = useState('chat') // 'chat' | 'logs' | 'config'
-  const [terminalView, setTerminalView] = useState(false) // toggle terminal overlay
+  const [viewMode, setViewMode] = useState('gui') // 'gui' (chat) | 'tui' (terminal)
   const logsRef = useRef(null)
 
   // Shared message state between Chat and Terminal
@@ -125,13 +131,13 @@ export default function AgentDetailPage() {
   const canRestart = agent?.status && ['running', 'stopped', 'error'].includes(agent.status)
 
   if (loading && !agent) {
-    return <p className="text-zinc-500 text-sm font-mono">Loading agent...</p>
+    return <p className="text-zinc-500 text-sm font-mono font-normal">Loading agent...</p>
   }
 
   if (!agent) {
     return (
       <div className="text-center py-12">
-        <p className="text-zinc-400 font-mono">Agent not found</p>
+        <p className="text-zinc-400 text-sm font-mono font-normal">Agent not found</p>
         <button onClick={() => navigate('/agents')} className="mt-4 text-sm text-zinc-500 hover:text-zinc-300 underline">
           ← Back to agents
         </button>
@@ -143,16 +149,31 @@ export default function AgentDetailPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <button onClick={() => navigate('/agents')} className="text-xs text-zinc-500 hover:text-zinc-300 font-mono mb-2">
+        <button
+          type="button"
+          onClick={() => navigate('/agents')}
+          className="mb-3 font-mono text-xs text-zinc-500 hover:text-zinc-300"
+        >
           ← Back to agents
         </button>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="font-mono text-2xl font-semibold">{agent.name}</h1>
-            <div className="flex gap-2 mt-1 text-sm text-zinc-500 font-mono">
-              <span>{agent.harness}</span>
-              {agent.model && <span>· {agent.model}</span>}
-              {agent.provider && <span>· {agent.provider}</span>}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <img
+              src={agentAvatarUrl(agent)}
+              alt=""
+              className="node-bit-avatar h-12 w-12 shrink-0 rounded-full bg-[#121218] object-contain object-center p-1.5 ring-1 ring-white/10"
+              style={isAgentLive(agent.status) ? { boxShadow: '0 0 16px rgba(255, 255, 255, 0.22)' } : undefined}
+              draggable={false}
+            />
+            <div className="min-w-0">
+              <h1 className="font-mono text-2xl font-semibold tracking-wide">
+                {shortLabel(agent.name)}
+              </h1>
+              <p className="mt-0.5 truncate font-mono text-sm text-zinc-500" title={agent.name}>
+                {agent.name}
+                {agent.harness ? ` · ${agent.harness}` : ''}
+                {agent.model ? ` · ${agent.model}` : ''}
+              </p>
             </div>
           </div>
           <StatusBadge status={agent.status} />
@@ -160,41 +181,45 @@ export default function AgentDetailPage() {
       </div>
 
       {/* Controls */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
+          type="button"
           onClick={handleStart}
           disabled={!canStart || !!actionInProgress}
-          className="px-3 py-1.5 text-sm bg-zinc-100 text-zinc-950 rounded font-mono disabled:opacity-30 hover:bg-white"
+          className="rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1.5 font-mono text-[11px] font-medium text-zinc-950 transition-colors hover:bg-white disabled:opacity-30"
         >
           Start
         </button>
         <button
+          type="button"
           onClick={handleStop}
           disabled={!canStop || !!actionInProgress}
-          className="px-3 py-1.5 text-sm bg-zinc-800 text-zinc-200 rounded border border-zinc-700 font-mono disabled:opacity-30 hover:bg-zinc-700"
+          className="rounded-lg border border-zinc-700/60 bg-zinc-950/60 px-3 py-1.5 font-mono text-[11px] text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-100 disabled:opacity-30"
         >
           Stop
         </button>
         <button
+          type="button"
           onClick={handleRestart}
           disabled={!canRestart || !!actionInProgress}
-          className="px-3 py-1.5 text-sm bg-zinc-800 text-zinc-200 rounded border border-zinc-700 font-mono disabled:opacity-30 hover:bg-zinc-700"
+          className="rounded-lg border border-zinc-700/60 bg-zinc-950/60 px-3 py-1.5 font-mono text-[11px] text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-100 disabled:opacity-30"
         >
           Restart
         </button>
         <div className="flex-1" />
         <Link
-          to={`/terminals?agent=${agent.id}`}
-          className="px-3 py-1.5 text-sm bg-zinc-900 text-zinc-300 rounded border border-zinc-700 font-mono hover:border-zinc-500"
+          to={`/?view=herd&agent=${agent.id}`}
+          className="rounded-lg border border-zinc-700/60 bg-zinc-950/60 px-3 py-1.5 font-mono text-[11px] text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-100"
         >
-          Open in Herd
+          Open in panes
         </Link>
         <button
+          type="button"
           onClick={handleDelete}
-          className={`px-3 py-1.5 text-sm rounded border font-mono ${
+          className={`rounded-lg border px-3 py-1.5 font-mono text-[11px] transition-colors ${
             confirmDelete
-              ? 'bg-red-900 text-red-200 border-red-700 hover:bg-red-800'
-              : 'bg-zinc-900 text-zinc-500 border-zinc-800 hover:text-red-400 hover:border-red-900'
+              ? 'border-red-700 bg-red-900 text-red-200 hover:bg-red-800'
+              : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-red-900 hover:text-red-400'
           }`}
         >
           {confirmDelete ? 'Click again to confirm' : 'Delete'}
@@ -202,34 +227,32 @@ export default function AgentDetailPage() {
       </div>
 
       {actionInProgress && (
-        <p className="text-yellow-400 text-xs font-mono animate-pulse">
+        <p className="animate-pulse font-mono text-sm text-yellow-400">
           {actionInProgress}...
         </p>
       )}
 
       {/* Info grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-        <div className="bg-zinc-900 border border-zinc-800 rounded p-3">
-          <p className="text-zinc-500 text-xs font-mono mb-1">PID</p>
-          <p className="font-mono text-zinc-200">{agent.pid || '—'}</p>
+      <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
+          <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-zinc-600">PID</p>
+          <p className="font-mono text-sm text-zinc-200">{agent.pid || '—'}</p>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded p-3">
-          <p className="text-zinc-500 text-xs font-mono mb-1">Process Group</p>
-          <p className="font-mono text-zinc-200">{agent.pgid || '—'}</p>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
+          <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-zinc-600">Process group</p>
+          <p className="font-mono text-sm text-zinc-200">{agent.pgid || '—'}</p>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded p-3">
-          <p className="text-zinc-500 text-xs font-mono mb-1">Uptime</p>
-          <p className="font-mono text-zinc-200">
-            {agent.process_started_at
-              ? Math.round((Date.now() / 1000 - agent.process_started_at) / 60) + 'm'
-              : '—'}
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
+          <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-zinc-600">Uptime</p>
+          <p className="font-mono text-sm text-zinc-200">
+            {formatUptime(agent.process_started_at)}
           </p>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded p-3">
-          <p className="text-zinc-500 text-xs font-mono mb-1">Last Heartbeat</p>
-          <p className="font-mono text-zinc-200">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
+          <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-zinc-600">Last heartbeat</p>
+          <p className="font-mono text-sm text-zinc-200">
             {agent.last_heartbeat
-              ? Math.round((Date.now() / 1000 - agent.last_heartbeat)) + 's ago'
+              ? `${Math.round((Date.now() / 1000 - agent.last_heartbeat))}s ago`
               : '—'}
           </p>
         </div>
@@ -237,20 +260,23 @@ export default function AgentDetailPage() {
 
       {/* Skills */}
       {agent.skills?.length > 0 && (
-        <div className="flex gap-1.5 flex-wrap">
-          {agent.skills.map(s => (
-            <span key={s} className="bg-zinc-800 px-2 py-0.5 rounded text-xs font-mono text-zinc-400">{s}</span>
+        <div className="flex flex-wrap gap-1.5">
+          {agent.skills.map((s) => (
+            <span key={s} className="rounded-full bg-zinc-800 px-2 py-0.5 font-mono text-xs text-zinc-400">
+              {s}
+            </span>
           ))}
         </div>
       )}
 
-      {/* Tabs — chat is primary, terminal is a toggle within chat */}
-      <div className="flex gap-1 border-b border-zinc-800">
-        {['chat', 'logs', 'config'].map(tab => (
+      {/* Tabs */}
+      <div className="flex items-center gap-1 border-b border-zinc-800">
+        {['chat', 'logs', 'config'].map((tab) => (
           <button
             key={tab}
-            onClick={() => { setActiveTab(tab); if (tab !== 'chat') setTerminalView(false) }}
-            className={`px-4 py-2 text-sm font-mono border-b-2 transition-colors ${
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`border-b-2 px-4 py-2 font-mono text-sm transition-colors ${
               activeTab === tab
                 ? 'border-zinc-200 text-zinc-100'
                 : 'border-transparent text-zinc-500 hover:text-zinc-300'
@@ -261,28 +287,74 @@ export default function AgentDetailPage() {
         ))}
       </div>
 
-      {/* Tab content — both chat and terminal stay mounted, CSS toggles visibility */}
+      {/* Chat / TUI — GUI is progressive chat; TUI is raw terminal */}
       {activeTab === 'chat' && (
-        <div className="relative" style={{ minHeight: '400px' }}>
-          <div className={terminalView ? 'hidden' : ''}>
-            <AgentChat
-              agentId={agent.id}
-              agentName={agent.name}
-              externalMessages={sharedMessages}
-              onMessagesChange={setSharedMessages}
-              externalSessionId={sharedSessionId}
-              onSessionIdChange={setSharedSessionId}
-              onToggleTerminal={() => setTerminalView(true)}
-            />
+        <div className="overflow-hidden rounded-xl border border-zinc-800">
+          <div className="flex items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-900/80 px-3 py-2">
+            <div className="min-w-0 font-mono text-[11px] text-zinc-500">
+              {viewMode === 'gui' ? (
+                <>
+                  <span className="text-zinc-400">Chat with </span>
+                  <span className="text-zinc-200">{agent.name}</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-zinc-400">Terminal · </span>
+                  <span className="text-zinc-200">{agent.name}</span>
+                </>
+              )}
+            </div>
+            <div
+              className="inline-flex shrink-0 rounded-lg border border-zinc-700/60 bg-zinc-950/80 p-0.5"
+              role="group"
+              aria-label="View mode"
+            >
+              <button
+                type="button"
+                onClick={() => setViewMode('tui')}
+                className={`rounded-md px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                  viewMode === 'tui'
+                    ? 'bg-zinc-100 font-medium text-zinc-950'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+                title="Terminal — less chrome, raw shell"
+              >
+                TUI
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('gui')}
+                className={`rounded-md px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                  viewMode === 'gui'
+                    ? 'bg-zinc-100 font-medium text-zinc-950'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+                title="Chat — more progressive disclosure"
+              >
+                GUI
+              </button>
+            </div>
           </div>
-          <div className={terminalView ? '' : 'hidden'}>
-            <AgentTerminal
-              agentId={agent.id}
-              agentName={agent.name}
-              externalMessages={sharedMessages}
-              onMessagesChange={setSharedMessages}
-              onExitTerminal={() => setTerminalView(false)}
-            />
+
+          <div className="relative min-h-[400px]">
+            <div className={viewMode === 'gui' ? '' : 'hidden'}>
+              <AgentChat
+                agentId={agent.id}
+                agentName={agent.name}
+                externalMessages={sharedMessages}
+                onMessagesChange={setSharedMessages}
+                externalSessionId={sharedSessionId}
+                onSessionIdChange={setSharedSessionId}
+                hideHeader
+              />
+            </div>
+            <div className={viewMode === 'tui' ? '' : 'hidden'}>
+              <AgentTerminal
+                agentId={agent.id}
+                agentName={agent.name}
+                chrome={false}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -290,23 +362,23 @@ export default function AgentDetailPage() {
       {activeTab === 'logs' && (
         <div
           ref={logsRef}
-          className="bg-zinc-950 border border-zinc-800 rounded p-4 h-96 overflow-y-auto font-mono text-xs text-zinc-300 whitespace-pre-wrap"
+          className="h-96 overflow-y-auto whitespace-pre-wrap rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs text-zinc-300"
         >
           {logs || 'No logs available.'}
         </div>
       )}
 
       {activeTab === 'config' && (
-        <div className="bg-zinc-950 border border-zinc-800 rounded p-4 overflow-auto font-mono text-xs text-zinc-300">
+        <div className="overflow-auto rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs text-zinc-300">
           <pre>{JSON.stringify(agent.config || {}, null, 2)}</pre>
         </div>
       )}
 
       {/* Metrics (if running) */}
       {metrics?.running && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2">
-          <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-wider">Live Metrics</h3>
-          <div className="grid grid-cols-3 gap-4 text-sm font-mono">
+        <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+          <h3 className="font-mono text-xs uppercase tracking-wider text-zinc-500">Live metrics</h3>
+          <div className="grid grid-cols-3 gap-4 font-mono text-sm">
             <div>
               <span className="text-zinc-500">PID: </span>
               <span className="text-zinc-200">{metrics.metrics?.pid}</span>

@@ -4,11 +4,11 @@ import {
   ReactFlow,
   Controls,
   Background,
+  BackgroundVariant,
   MarkerType,
   useNodesState,
   useEdgesState,
   addEdge,
-  Panel,
   Handle,
   Position,
 } from '@xyflow/react'
@@ -18,45 +18,99 @@ import {
   listTasks, getTaskStatus, stopTask, approveTask,
 } from '../../api/workflows'
 import { api } from '../../api/agents'
+import { agentAvatarUrl } from '../../lib/agentField'
+import {
+  IconAgents,
+  IconApprove,
+  IconDecision,
+  IconSubflow,
+} from '../../components/icons'
 
-// ── Custom node styles ────────────────────────────────────────────────────
+// ── Monochrome node type meta ─────────────────────────────────────────────
 
-const NODE_STYLES = {
-  agent: {
-    bg: '#18181b', border: '#22c55e', text: '#22c55e', icon: '🤖',
-  },
-  approval: {
-    bg: '#18181b', border: '#f59e0b', text: '#f59e0b', icon: '✅',
-  },
-  decision: {
-    bg: '#18181b', border: '#3b82f6', text: '#3b82f6', icon: '🔀',
-  },
-  subflow: {
-    bg: '#18181b', border: '#a855f7', text: '#a855f7', icon: '📦',
-  },
+const NODE_META = {
+  agent: { label: 'agent', Icon: IconAgents },
+  approval: { label: 'approval', Icon: IconApprove },
+  decision: { label: 'decision', Icon: IconDecision },
+  subflow: { label: 'subflow', Icon: IconSubflow },
+}
+
+const EDGE_STYLE = {
+  stroke: '#9a9aa3',
+  strokeWidth: 1.35,
+}
+
+const EDGE_MARKER = {
+  type: MarkerType.ArrowClosed,
+  color: '#9a9aa3',
+  width: 16,
+  height: 16,
 }
 
 function WorkflowNode({ data }) {
-  const style = NODE_STYLES[data.node_type] || NODE_STYLES.agent
+  const meta = NODE_META[data.node_type] || NODE_META.agent
+  const Icon = meta.Icon
+  const isAgent = data.node_type === 'agent'
+  const running = data.status === 'running'
+  const avatarSrc = isAgent
+    ? agentAvatarUrl({
+        id: data.agent_id || data.ref_id,
+        name: data.agent_name || data.ref_id,
+      })
+    : null
+
+  // Eclipse backlight: blurred white plate (same silhouette) behind opaque face.
+  // Static — no spin. Light peeks only where blur spills past the face edge.
   return (
-    <div className={`px-4 py-3 rounded-lg border text-sm font-mono shadow-lg ${
-      data.status === 'running' ? 'animate-pulse' :
-      data.status === 'completed' ? 'opacity-80' : ''
-    }`}
-      style={{ background: style.bg, borderColor: style.border, color: style.text }}
-    >
-      <Handle type="target" position={Position.Left} style={{ background: style.border }} />
-      <div className="flex items-center gap-2">
-        <span>{style.icon}</span>
-        <span className="font-semibold">{data.ref_id}</span>
-      </div>
-      {data.agent_name && <div className="text-xs opacity-70 mt-1">{data.agent_name}</div>}
-      {data.status && data.status !== 'idle' && (
-        <div className="text-xs mt-1 uppercase tracking-wider" style={{ color: style.text }}>
-          ● {data.status}
+    <div className="wf-node" data-status={data.status || 'idle'}>
+      <div className="wf-node__shell">
+        <div className="wf-node__backlight" aria-hidden>
+          <span className="wf-node__backlight-bloom" />
+          <span className="wf-node__backlight-plate" />
         </div>
-      )}
-      <Handle type="source" position={Position.Right} style={{ background: style.border }} />
+        <div className="wf-node__face">
+          <Handle
+            type="target"
+            position={Position.Left}
+            className="!h-2 !w-2 !border-0 !bg-zinc-300"
+          />
+          <div className="wf-node__body">
+            <div className="wf-node__sprite">
+              {isAgent ? (
+                <img src={avatarSrc} alt="" className="node-bit-avatar" draggable={false} />
+              ) : (
+                <Icon className="h-5 w-5 text-zinc-200" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-[13px] font-semibold tracking-wide text-zinc-100">
+                {data.ref_id}
+              </div>
+              <div className="truncate font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+                {meta.label}
+                {data.agent_name ? ` · ${data.agent_name}` : ''}
+              </div>
+            </div>
+          </div>
+          {data.status && data.status !== 'idle' && (
+            <div className="wf-node__status font-mono text-[10px] uppercase tracking-wider text-zinc-400">
+              <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
+                running
+                  ? 'bg-zinc-100 shadow-[0_0_8px_rgba(255,255,255,0.45)]'
+                  : data.status === 'completed'
+                    ? 'bg-zinc-400'
+                    : 'bg-zinc-600'
+              }`} />
+              {data.status}
+            </div>
+          )}
+          <Handle
+            type="source"
+            position={Position.Right}
+            className="!h-2 !w-2 !border-0 !bg-zinc-300"
+          />
+        </div>
+      </div>
     </div>
   )
 }
@@ -92,9 +146,24 @@ export default function WorkflowEditor() {
   const [configData, setConfigData] = useState({})
   const [taskId, setTaskId] = useState(null)
   const [taskStatus, setTaskStatus] = useState(null)
-  const [draftSaved, setDraftSaved] = useState(false)
+  const [showRunModal, setShowRunModal] = useState(false)
+  const [saveFlash, setSaveFlash] = useState(false)
+  const [changeSavedToast, setChangeSavedToast] = useState(false)
   const taskPollRef = useRef(null)
   const nextPosRef = useRef(0)
+  const nameInputRef = useRef(null)
+  const savedNameRef = useRef('')
+  const toastTimerRef = useRef(null)
+
+  const showChangeSaved = () => {
+    setChangeSavedToast(true)
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setChangeSavedToast(false), 2200)
+  }
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+  }, [])
 
   // Load workflow (or empty draft for /workflows/new)
   const loadWorkflow = useCallback(async () => {
@@ -112,6 +181,7 @@ export default function WorkflowEditor() {
           description: '',
           guardrails: { max_iterations: 10, timeout_per_task: 1800 },
         })
+        savedNameRef.current = 'Untitled Workflow'
         setNodes([])
         setEdges([])
         setWorkflowId(null)
@@ -122,6 +192,7 @@ export default function WorkflowEditor() {
       const data = await getWorkflow(id)
       setWf(data.workflow)
       setWorkflowId(data.workflow?.id || id)
+      savedNameRef.current = data.workflow?.name || ''
 
       const positions = DEFAULT_LAYOUT
       const flowNodes = (data.nodes || []).map((n, i) => ({
@@ -144,9 +215,9 @@ export default function WorkflowEditor() {
         source: e.source_ref,
         target: e.target_ref,
         label: e.label,
-        labelStyle: { fill: '#71717a' },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#71717a' },
-        style: { stroke: '#52525b' },
+        labelStyle: { fill: '#71717a', fontSize: 10 },
+        markerEnd: EDGE_MARKER,
+        style: EDGE_STYLE,
         data_rules: e.data_rules,
       }))
       setEdges(flowEdges)
@@ -166,9 +237,9 @@ export default function WorkflowEditor() {
     setEdges((prev) => addEdge({
       ...params,
       label: '',
-      labelStyle: { fill: '#71717a' },
-      markerEnd: { type: MarkerType.ArrowClosed, color: '#71717a' },
-      style: { stroke: '#52525b' },
+      labelStyle: { fill: '#71717a', fontSize: 10 },
+      markerEnd: EDGE_MARKER,
+      style: EDGE_STYLE,
     }, prev))
   }, [setEdges])
 
@@ -258,10 +329,13 @@ export default function WorkflowEditor() {
         const created = await createWorkflow(payload)
         setWf(created)
         setWorkflowId(created.id)
+        savedNameRef.current = created.name || payload.name
         navigate(`/workflows/${created.id}`, { replace: true })
         return created.id
       }
-      await updateWorkflow(workflowId, payload)
+      const updated = await updateWorkflow(workflowId, payload)
+      if (updated?.name) setWf((w) => ({ ...w, ...updated }))
+      savedNameRef.current = updated?.name || payload.name
       return workflowId
     } catch (e) {
       alert(e.message)
@@ -269,6 +343,44 @@ export default function WorkflowEditor() {
     } finally {
       setSaving(false)
     }
+  }
+
+  /** Quiet-save name when the title input loses focus. */
+  const handleNameBlur = async () => {
+    const next = (wf?.name || '').trim() || 'Untitled Workflow'
+    if (next !== (wf?.name || '')) {
+      setWf((w) => ({ ...w, name: next }))
+    }
+    if (next === savedNameRef.current) return
+
+    setSaving(true)
+    try {
+      const payload = { ...buildPayload(), name: next }
+      if (!workflowId) {
+        const created = await createWorkflow(payload)
+        setWf(created)
+        setWorkflowId(created.id)
+        savedNameRef.current = created.name || next
+        navigate(`/workflows/${created.id}`, { replace: true })
+      } else {
+        const updated = await updateWorkflow(workflowId, payload)
+        if (updated) setWf((w) => ({ ...w, ...updated, name: updated.name || next }))
+        savedNameRef.current = updated?.name || next
+      }
+      showChangeSaved()
+    } catch (e) {
+      alert(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** Persist, then open the run modal (Save replaces the old Draft/Execute chrome). */
+  const handleSaveAndOpenRun = async () => {
+    const savedId = await handleSave()
+    if (!savedId) return
+    setSaveFlash(true)
+    setShowRunModal(true)
   }
 
   // ── Validate ─────────────────────────────────────────────────────
@@ -294,9 +406,11 @@ export default function WorkflowEditor() {
     try {
       const savedId = workflowId || await handleSave()
       if (!savedId) return
+      setSaveFlash(false)
+      setShowRunModal(true)
       const result = await executeWorkflow(savedId, {})
       setTaskId(result.task_id)
-      setTaskStatus(result.status)
+      setTaskStatus({ status: result.status || 'pending', nodes: [] })
       startPolling(savedId, result.task_id)
     } catch (e) {
       alert(e.message)
@@ -354,164 +468,333 @@ export default function WorkflowEditor() {
     }
   }
 
-  if (loading) return <div className="text-zinc-500 font-mono">Loading workflow…</div>
+  if (loading) {
+    return (
+      <div className="flex h-full min-h-0 items-center justify-center bg-[#07070a] font-mono text-sm text-zinc-500">
+        Loading workflow…
+      </div>
+    )
+  }
 
   return (
-    <div className="h-[calc(100vh-120px)] flex flex-col">
-      {/* Top bar */}
-      <div className="flex items-center justify-between mb-3 shrink-0">
-        <div className="flex items-center gap-3">
-          <button onClick={() => {
-            if (confirm('Are you sure you want to cancel? This workflow will not be saved.')) {
-              navigate('/workflows')
-            }
-          }} className="text-red-400 hover:text-red-300 text-sm">
-            ✕ Cancel
+    <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#07070a]">
+      {/* Full-bleed graph */}
+      <div className="wf-graph absolute inset-0">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodeClick={onNodeClick}
+          nodeTypes={nodeTypes}
+          fitView
+          fitViewOptions={{
+            padding: 0.45,
+            maxZoom: 0.65,
+            minZoom: 0.25,
+          }}
+          defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
+          minZoom={0.2}
+          maxZoom={1.25}
+          colorMode="dark"
+          proOptions={{ hideAttribution: true }}
+          defaultEdgeOptions={{
+            markerEnd: EDGE_MARKER,
+            style: EDGE_STYLE,
+          }}
+        >
+          <Background
+            id="wf-lines"
+            variant={BackgroundVariant.Lines}
+            gap={48}
+            lineWidth={1}
+            color="rgba(255, 255, 255, 0.03)"
+            bgColor="#07070a"
+          />
+          <Controls
+            position="bottom-right"
+            className="!mb-[4.75rem] !mr-3 sm:!mb-20"
+          />
+        </ReactFlow>
+        <div
+          className="node-field-vignette pointer-events-none absolute inset-0 z-[4]"
+          aria-hidden
+        />
+      </div>
+
+      {/* Name-change toast */}
+      {changeSavedToast && (
+        <div
+          className="pointer-events-none absolute inset-x-0 top-3 z-40 flex justify-center px-3 sm:top-4"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="wf-toast rounded-full border border-zinc-600/70 bg-zinc-950/90 px-3 py-1.5 font-mono text-[11px] tracking-wide text-zinc-200 shadow-lg backdrop-blur-md">
+            Change saved
+          </span>
+        </div>
+      )}
+
+      {/* Floating top chrome */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-wrap items-start justify-between gap-3 p-3 sm:p-4">
+        <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-zinc-700/60 bg-zinc-950/80 px-2.5 py-1.5 backdrop-blur-md">
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm('Leave without saving? Unsaved changes will be lost.')) {
+                navigate('/workflows')
+              }
+            }}
+            className="rounded-lg px-2 py-1 font-mono text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            ← Back
           </button>
-          <h1 className="font-mono text-lg font-semibold">{wf?.name}</h1>
-          {draftSaved && <span className="text-xs text-zinc-500 font-mono">Draft saved</span>}
+          <div className="h-4 w-px bg-zinc-700/80" aria-hidden />
+          <input
+            ref={nameInputRef}
+            type="text"
+            value={wf?.name ?? ''}
+            onChange={(e) => setWf((w) => ({ ...w, name: e.target.value }))}
+            onBlur={handleNameBlur}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur()
+            }}
+            aria-label="Workflow name"
+            placeholder="Untitled Workflow"
+            className="max-w-[12rem] min-w-[8rem] truncate bg-transparent font-mono text-sm font-semibold tracking-wide text-zinc-100 outline-none placeholder:text-zinc-600 focus:ring-0 sm:max-w-xs"
+          />
           {taskStatus && (
-            <span className={`text-xs font-mono px-2 py-0.5 rounded ${
-              taskStatus.status === 'completed' ? 'bg-emerald-900/50 text-emerald-400' :
-              taskStatus.status === 'failed' ? 'bg-red-900/50 text-red-400' :
-              taskStatus.status === 'cancelled' ? 'bg-zinc-800 text-zinc-400' :
-              'bg-amber-900/50 text-amber-400'
-            }`}>
+            <button
+              type="button"
+              onClick={() => setShowRunModal(true)}
+              className={`rounded px-1.5 py-0.5 font-mono text-[10px] uppercase transition-colors ${
+                taskStatus.status === 'completed' ? 'bg-zinc-800 text-zinc-200 hover:bg-zinc-700' :
+                taskStatus.status === 'failed' ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700' :
+                taskStatus.status === 'cancelled' ? 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800' :
+                'bg-zinc-800 text-zinc-100 hover:bg-zinc-700'
+              }`}
+            >
               {taskStatus.status}
-            </span>
+            </button>
           )}
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
           {validation && (
-            <span className={`text-xs font-mono mr-2 ${validation.valid ? 'text-emerald-400' : 'text-red-400'}`}>
-              {validation.valid ? `✓ Valid (${validation.node_count} nodes)` : `✗ ${validation.error}`}
-            </span>
+            <div className={`rounded-lg border border-zinc-700/60 bg-zinc-950/80 px-2.5 py-1.5 font-mono text-[10px] backdrop-blur-md ${
+              validation.valid ? 'text-zinc-300' : 'text-zinc-500'
+            }`}>
+              {validation.valid ? `Valid · ${validation.node_count}` : validation.error}
+            </div>
           )}
-          <button onClick={handleValidate} disabled={validating}
-            className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded border border-zinc-700 transition-colors disabled:opacity-50">
-            {validating ? 'Validating…' : 'Validate DAG'}
-          </button>
-          <button onClick={handleSave} disabled={saving}
-            className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 rounded transition-colors disabled:opacity-50">
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          <button onClick={async () => {
-            setDraftSaved(false)
-            await handleSave()
-            setDraftSaved(true)
-            setTimeout(() => setDraftSaved(false), 3000)
-          }} className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded border border-zinc-700 transition-colors">
-            💾 Save as Draft
-          </button>
-          {!taskStatus && (
-            <button onClick={handleExecute}
-              className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 rounded transition-colors">
-              ▶ Execute
-            </button>
-          )}
-          {taskStatus && ['running', 'pending', 'waiting_approval'].includes(taskStatus.status) && (
-            <button onClick={handleStop}
-              className="px-3 py-1.5 text-xs bg-red-900/50 hover:bg-red-800/50 text-red-400 rounded border border-red-900 transition-colors">
-              ■ Stop
-            </button>
-          )}
-          {taskStatus?.status === 'waiting_approval' && (
-            <button onClick={handleApprove}
-              className="px-3 py-1.5 text-xs bg-amber-600 hover:bg-amber-500 rounded transition-colors">
-              ✓ Approve
-            </button>
-          )}
+          <ChromeBtn onClick={handleValidate} disabled={validating}>
+            {validating ? '…' : 'Validate'}
+          </ChromeBtn>
+          <ChromeBtn onClick={handleSaveAndOpenRun} disabled={saving} primary>
+            {saving ? '…' : 'Save'}
+          </ChromeBtn>
         </div>
       </div>
 
-      {/* Graph + sidebar */}
-      <div className="flex flex-1 min-h-0">
-        {/* React Flow */}
-        <div className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={onNodeClick}
-            nodeTypes={nodeTypes}
-            fitView
-            defaultEdgeOptions={{
-              markerEnd: { type: MarkerType.ArrowClosed, color: '#71717a' },
-              style: { stroke: '#52525b' },
-            }}
-          >
-            <Background color="#27272a" gap={20} />
-            <Controls />
-            <Panel position="top-left" className="flex flex-col gap-2">
-              <div className="text-xs font-mono text-zinc-500 mb-1">Add node:</div>
-              {Object.keys(NODE_STYLES).map((type) => (
-                <button key={type} onClick={() => addNode(type)}
-                  className="px-2 py-1 text-xs bg-zinc-900 border border-zinc-700 rounded hover:border-zinc-500 transition-colors flex items-center gap-1"
-                  style={{ color: NODE_STYLES[type].text }}
-                >
-                  {NODE_STYLES[type].icon} {type}
-                </button>
-              ))}
-            </Panel>
-          </ReactFlow>
+      {/* Floating add-node palette */}
+      <div className="pointer-events-auto absolute left-3 top-[4.25rem] z-10 flex flex-col gap-1.5 rounded-xl border border-zinc-700/60 bg-zinc-950/80 p-2 backdrop-blur-md sm:left-4">
+        <div className="px-1 font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+          Add node
         </div>
+        {Object.entries(NODE_META).map(([type, meta]) => {
+          const Icon = meta.Icon
+          return (
+            <button
+              key={type}
+              type="button"
+              onClick={() => addNode(type)}
+              className="flex items-center gap-1.5 rounded-lg border border-zinc-700/50 bg-zinc-950/60 px-2.5 py-1.5 font-mono text-[11px] text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-100"
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {meta.label}
+            </button>
+          )
+        })}
+      </div>
 
-        {/* Task status sidebar */}
-        {taskStatus && taskStatus.nodes && (
-          <div className="w-72 ml-3 bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 overflow-y-auto shrink-0">
-            <h3 className="font-mono text-sm font-semibold mb-3">Execution Progress</h3>
-            <div className="space-y-2">
-              {taskStatus.nodes.map((n) => (
-                <div key={n.ref_id} className="text-xs font-mono flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${
-                    n.status === 'completed' ? 'bg-emerald-500' :
-                    n.status === 'running' ? 'bg-amber-500 animate-pulse' :
-                    n.status === 'waiting' ? 'bg-blue-500' :
-                    n.status === 'cancelled' ? 'bg-zinc-600' :
-                    'bg-zinc-700'
-                  }`} />
-                  <span className="text-zinc-400">{n.ref_id}</span>
-                  <span className="ml-auto" style={{
-                    color: n.status === 'completed' ? '#22c55e' :
-                           n.status === 'running' ? '#f59e0b' :
-                           n.status === 'cancelled' ? '#71717a' : '#a1a1aa'
-                  }}>{n.status}</span>
+      {/* Save → run modal */}
+      {showRunModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowRunModal(false)}
+        >
+          <div
+            className="w-full max-w-md space-y-5 rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="wf-run-modal-title"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 id="wf-run-modal-title" className="font-mono text-lg font-semibold text-zinc-100">
+                  {taskStatus ? 'Run workflow' : 'Workflow saved'}
+                </h2>
+                <p className="mt-1 font-mono text-xs text-zinc-500">
+                  {wf?.name || 'Untitled Workflow'}
+                  {saveFlash && !taskStatus ? ' · ready to run' : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRunModal(false)}
+                className="text-zinc-500 transition-colors hover:text-white"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {!taskStatus && (
+              <p className="font-mono text-sm leading-relaxed text-zinc-400">
+                Starts a new run of this workflow: validates the graph, creates a task, and
+                walks each node in order. You can stop a run or approve waiting steps from here.
+              </p>
+            )}
+
+            {taskStatus && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+                    Status
+                  </span>
+                  <span className={`rounded px-1.5 py-0.5 font-mono text-[11px] uppercase ${
+                    taskStatus.status === 'completed' ? 'bg-zinc-800 text-zinc-200' :
+                    taskStatus.status === 'failed' ? 'bg-zinc-800 text-zinc-400' :
+                    taskStatus.status === 'cancelled' ? 'bg-zinc-900 text-zinc-500' :
+                    'bg-zinc-800 text-zinc-100'
+                  }`}>
+                    {taskStatus.status}
+                  </span>
                 </div>
-              ))}
+
+                {taskStatus.nodes?.length > 0 && (
+                  <div className="max-h-[40vh] space-y-2 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+                    {taskStatus.nodes.map((n) => (
+                      <div key={n.ref_id} className="flex items-center gap-2 font-mono text-[11px]">
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                          n.status === 'completed' ? 'bg-zinc-300' :
+                          n.status === 'running' ? 'bg-zinc-100 shadow-[0_0_8px_rgba(255,255,255,0.4)]' :
+                          n.status === 'waiting' ? 'bg-zinc-500' :
+                          n.status === 'cancelled' ? 'bg-zinc-700' :
+                          'bg-zinc-800'
+                        }`} />
+                        <span className="truncate text-zinc-400">{n.ref_id}</span>
+                        <span className="ml-auto shrink-0 text-zinc-500">{n.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {taskStatus.result && (
+                  <pre className="max-h-32 overflow-auto rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 font-mono text-[10px] text-zinc-500">
+                    {typeof taskStatus.result === 'string'
+                      ? taskStatus.result
+                      : JSON.stringify(taskStatus.result, null, 2)}
+                  </pre>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowRunModal(false)}
+                className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1.5 font-mono text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
+              >
+                {taskStatus ? 'Close' : 'Save'}
+              </button>
+
+              {taskStatus && ['running', 'pending', 'waiting_approval'].includes(taskStatus.status) && (
+                <button
+                  type="button"
+                  onClick={handleStop}
+                  className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1.5 font-mono text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
+                >
+                  Stop
+                </button>
+              )}
+
+              {taskStatus?.status === 'waiting_approval' && (
+                <button
+                  type="button"
+                  onClick={handleApprove}
+                  className="rounded bg-zinc-100 px-3 py-1.5 font-mono text-xs font-medium text-zinc-950 transition-colors hover:bg-white"
+                >
+                  Approve
+                </button>
+              )}
+
+              {(!taskStatus || ['completed', 'failed', 'cancelled'].includes(taskStatus.status)) && (
+                <button
+                  type="button"
+                  onClick={handleExecute}
+                  className="rounded bg-zinc-100 px-3 py-1.5 font-mono text-xs font-medium text-zinc-950 transition-colors hover:bg-white"
+                >
+                  {taskStatus ? 'Run again' : 'Save and run'}
+                </button>
+              )}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Config modal */}
       {showConfig && selectedNode && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowConfig(false)}>
-          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowConfig(false)}>
+          <div className="w-full max-w-md space-y-4 rounded-xl border border-zinc-700 bg-zinc-900 p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h2 className="font-mono text-lg font-semibold">
                 Configure: {selectedNode.data.ref_id} ({selectedNode.data.node_type})
               </h2>
-              <button onClick={() => setShowConfig(false)} className="text-zinc-500 hover:text-white">✕</button>
+              <button type="button" onClick={() => setShowConfig(false)} className="text-zinc-500 hover:text-white">✕</button>
             </div>
 
-            {/* Node type color */}
-            <div className="flex items-center gap-2">
-              <span style={{ color: NODE_STYLES[selectedNode.data.node_type]?.text || '#fff' }}>
-                {NODE_STYLES[selectedNode.data.node_type]?.icon || '🤖'}
-              </span>
-              <span className="text-sm text-zinc-400">{selectedNode.data.ref_id}</span>
+            <div className="flex items-center gap-2.5">
+              {(() => {
+                const meta = NODE_META[selectedNode.data.node_type] || NODE_META.agent
+                const Icon = meta.Icon
+                const isAgent = selectedNode.data.node_type === 'agent'
+                return (
+                  <>
+                    <div className="wf-node__sprite">
+                      {isAgent ? (
+                        <img
+                          src={agentAvatarUrl({
+                            id: selectedNode.data.agent_id || selectedNode.data.ref_id,
+                            name: selectedNode.data.agent_name || selectedNode.data.ref_id,
+                          })}
+                          alt=""
+                          className="node-bit-avatar"
+                        />
+                      ) : (
+                        <Icon className="h-5 w-5 text-zinc-200" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-sm text-zinc-200">{selectedNode.data.ref_id}</div>
+                      <div className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+                        {meta.label}
+                      </div>
+                    </div>
+                  </>
+                )
+              })()}
             </div>
 
-            {/* Agent assignment (for agent nodes) */}
             {selectedNode.data.node_type === 'agent' && (
               <div>
-                <label className="text-xs text-zinc-500 font-mono">Assign Agent</label>
+                <label className="font-mono text-xs text-zinc-500">Assign Agent</label>
                 <select
                   value={configData.agent_id || ''}
                   onChange={(e) => setConfigData({ ...configData, agent_id: e.target.value })}
-                  className="w-full mt-1 bg-zinc-800 border border-zinc-700 rounded p-2 text-sm text-zinc-200"
+                  className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800 p-2 text-sm text-zinc-200"
                 >
                   <option value="">-- Unassigned --</option>
                   {agents.map((a) => (
@@ -521,20 +804,18 @@ export default function WorkflowEditor() {
               </div>
             )}
 
-            {/* Prompt */}
             <div>
-              <label className="text-xs text-zinc-500 font-mono">Prompt (optional)</label>
+              <label className="font-mono text-xs text-zinc-500">Prompt (optional)</label>
               <textarea
                 value={configData.prompt || ''}
                 onChange={(e) => setConfigData({ ...configData, prompt: e.target.value })}
-                className="w-full mt-1 bg-zinc-800 border border-zinc-700 rounded p-2 text-sm text-zinc-200 h-20 resize-y"
+                className="mt-1 h-20 w-full resize-y rounded border border-zinc-700 bg-zinc-800 p-2 text-sm text-zinc-200"
                 placeholder="Node-specific prompt override…"
               />
             </div>
 
-            {/* Custom config (JSON) */}
             <div>
-              <label className="text-xs text-zinc-500 font-mono">Additional Config (JSON)</label>
+              <label className="font-mono text-xs text-zinc-500">Additional Config (JSON)</label>
               <textarea
                 value={JSON.stringify({
                   ...configData,
@@ -549,22 +830,31 @@ export default function WorkflowEditor() {
                     // ignore invalid JSON
                   }
                 }}
-                className="w-full mt-1 bg-zinc-800 border border-zinc-700 rounded p-2 text-xs font-mono text-zinc-200 h-24 resize-y"
+                className="mt-1 h-24 w-full resize-y rounded border border-zinc-700 bg-zinc-800 p-2 font-mono text-xs text-zinc-200"
               />
             </div>
 
-            <div className="flex gap-2 justify-between">
-              <button onClick={() => deleteNode(selectedNode.id)}
-                className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 border border-red-900/50 rounded transition-colors">
+            <div className="flex justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => deleteNode(selectedNode.id)}
+                className="rounded border border-red-900/50 px-3 py-1.5 text-xs text-red-400 transition-colors hover:text-red-300"
+              >
                 Delete Node
               </button>
               <div className="flex gap-2">
-                <button onClick={() => setShowConfig(false)}
-                  className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded border border-zinc-700 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => setShowConfig(false)}
+                  className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs transition-colors hover:bg-zinc-700"
+                >
                   Cancel
                 </button>
-                <button onClick={handleConfigSave}
-                  className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 rounded transition-colors">
+                <button
+                  type="button"
+                  onClick={handleConfigSave}
+                  className="rounded bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-950 transition-colors hover:bg-white"
+                >
                   Save Config
                 </button>
               </div>
@@ -573,5 +863,23 @@ export default function WorkflowEditor() {
         </div>
       )}
     </div>
+  )
+}
+
+function ChromeBtn({ children, onClick, disabled, primary }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={[
+        'rounded-lg border px-2.5 py-1.5 font-mono text-[11px] transition-colors disabled:opacity-50',
+        primary
+          ? 'border-zinc-200 bg-zinc-100 font-medium text-zinc-950 hover:bg-white'
+          : 'border-zinc-700/60 bg-zinc-950/80 text-zinc-300 backdrop-blur-md hover:border-zinc-500 hover:text-zinc-100',
+      ].join(' ')}
+    >
+      {children}
+    </button>
   )
 }

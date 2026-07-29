@@ -6,6 +6,9 @@ import {
   countLeaves,
   findLeafByAgent,
   herdState,
+  createWorkspace,
+  getActiveWorkspace,
+  upsertActiveWorkspace,
 } from '../lib/terminalLayout'
 
 describe('terminalLayout', () => {
@@ -34,5 +37,15 @@ describe('terminalLayout', () => {
     expect(herdState('running').key).toBe('working')
     expect(herdState('error').key).toBe('blocked')
     expect(herdState('stopped').key).toBe('idle')
+  })
+
+  it('creates and activates named workspaces', () => {
+    const a = createWorkspace('Alpha')
+    const b = createWorkspace('Beta')
+    const state = { activeId: a.id, workspaces: [a, b] }
+    expect(getActiveWorkspace(state).name).toBe('Alpha')
+    const patched = upsertActiveWorkspace(state, { focusedId: 'x' })
+    expect(getActiveWorkspace(patched).focusedId).toBe('x')
+    expect(getActiveWorkspace(patched).name).toBe('Alpha')
   })
 })

@@ -19,7 +19,10 @@ class ErrorBoundary extends Component {
             <h1 className="text-xl font-mono text-zinc-100 mb-2">Something went wrong</h1>
             <p className="text-zinc-400 mb-4 text-sm">{this.state.error?.message}</p>
             <button
-              onClick={() => window.location.href = '/'}
+              onClick={() => {
+                const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '') || ''
+                window.location.href = `${base}/`
+              }}
               className="px-4 py-2 bg-zinc-800 text-zinc-200 rounded hover:bg-zinc-700 font-mono text-sm"
             >
               Go Home

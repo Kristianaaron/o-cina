@@ -127,7 +127,7 @@ function SessionsTab({ projectId, project }) {
   }
 
   return (
-    <div className="flex gap-4 h-[calc(100vh-200px)] min-h-[400px]">
+    <div className="flex min-h-[400px] gap-4 h-[calc(100dvh-8rem)]">
       {/* Session list */}
       <div className="w-72 flex-shrink-0 flex flex-col border border-zinc-800 rounded overflow-hidden">
         <div className="p-3 border-b border-zinc-800 flex items-center justify-between">

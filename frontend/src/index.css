@@ -1,3 +1,753 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+  }
+}
+
+@layer utilities {
+  .node-field-grid {
+    background-color: #07070a;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 48px 48px, 48px 48px;
+    background-position: 0 0, 0 0;
+  }
+
+  /* Viewport vignette — fades canvas toward window edges; UI sits above */
+  .node-field-vignette {
+    background:
+      radial-gradient(
+        ellipse 72% 68% at 50% 48%,
+        transparent 42%,
+        rgba(7, 7, 10, 0.55) 72%,
+        #07070a 100%
+      );
+  }
+
+  /* Native selects — room beside chevron; Inter via font-sans at call sites */
+  .select-field {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 0.75rem;
+    padding-right: 2.5rem;
+  }
+}
+
+@keyframes pulse-bead {
+  from {
+    offset-distance: 0%;
+  }
+  to {
+    offset-distance: 100%;
+  }
+}
+
+/*
+ * Vercel triangle-led-4 → circle (same visual stack, circular occluder):
+ * bloom (screen) + offset plate (asymmetric rim) + luminosity (white→black)
+ * + grain (multiply 0.42 / 70px). Black disc above = sharp silhouette.
+ * No centered full-ring corona — that reads as a hard circle on dim sides.
+ */
+@keyframes node-radiance-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes node-radiance-breathe {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Idle crawl — compositor rotates a cached glow stack (no per-frame filter rebuild) */
+@keyframes node-led-spin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+.node-radiance {
+  --led-angle: -40deg;
+  --led-amp: 0.45;
+  --led-shift: calc(4px + 5px * var(--led-amp));
+  --led-phase: 0s;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
+  animation: node-radiance-in 700ms linear both;
+}
+
+/*
+ * Spin wrapper: glow layers are authored for light-from-+X, then rotated.
+ * Browser caches the filtered bitmap and only re-composites the rotate.
+ */
+.node-radiance__spin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 220%;
+  height: 220%;
+  transform: translate(-50%, -50%) rotate(var(--led-angle));
+  transform-origin: 50% 50%;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.node-radiance[data-led-idle='true'] .node-radiance__spin {
+  /* Negative delay = start mid-cycle from --led-phase (seconds into the loop) */
+  animation: node-led-spin 14.3s linear infinite;
+  animation-delay: var(--led-phase);
+  /* Drop will-change while CSS owns the transform */
+  will-change: auto;
+}
+
+.node-radiance[data-led-idle='false'] .node-radiance__spin {
+  animation: none;
+}
+
+/* Soft spill — tight falloff, fixed offset along +X (spin rotates it) */
+.node-radiance__bloom {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 66%;
+  height: 66%;
+  transform: translate(-50%, -50%) translate(var(--led-shift), 0);
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(255, 255, 255, calc(0.4 + 0.3 * var(--led-amp))) 0%,
+    rgba(255, 255, 255, calc(0.12 + 0.08 * var(--led-amp))) 32%,
+    rgba(255, 255, 255, 0.03) 52%,
+    transparent 68%
+  );
+  filter: blur(10px);
+  mix-blend-mode: screen;
+  animation: node-radiance-breathe 2.8s ease-in-out infinite;
+  animation-delay: 700ms;
+}
+
+/*
+ * Backlight plate — disc-sized, blurred, OFFSET toward light (+X).
+ * Bright edge leaks hard white; opposite edge stays dark (natural eclipse).
+ */
+.node-radiance__plate {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 45.5%;
+  height: 45.5%;
+  border-radius: 50%;
+  background: #ffffff;
+  filter: blur(calc(6.5px + 2px * var(--led-amp)));
+  opacity: calc(0.5 + 0.45 * var(--led-amp));
+  mix-blend-mode: plus-lighter;
+  transform: translate(-50%, -50%) translate(var(--led-shift), 0);
+}
+
+@supports not (mix-blend-mode: plus-lighter) {
+  .node-radiance__plate {
+    mix-blend-mode: screen;
+  }
+}
+
+/*
+ * Luminosity wash — white→black so dark regions leave the field alone.
+ */
+.node-radiance__luma {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 77%;
+  height: 77%;
+  transform: translate(-50%, -50%) translate(calc(7px * var(--led-amp)), 0);
+  background: radial-gradient(
+    circle at 50% 50%,
+    #f2f2f2 0%,
+    #bdbdbd 14%,
+    #6e6e6e 34%,
+    #2a2a2a 56%,
+    #0a0a0a 74%,
+    rgba(0, 0, 0, 0.55) 86%,
+    transparent 100%
+  );
+  border-radius: 50%;
+  mix-blend-mode: luminosity;
+  filter: blur(7px);
+  opacity: calc(0.45 + 0.35 * var(--led-amp));
+  animation: node-radiance-breathe 2.8s ease-in-out infinite;
+  animation-delay: 1.1s;
+}
+
+/* Vercel noise tile */
+.node-radiance__noise {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 70%;
+  height: 70%;
+  transform: translate(-50%, -50%) translate(var(--led-shift), 0);
+  opacity: 0.38;
+  mix-blend-mode: multiply;
+  border-radius: 50%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 70px 70px;
+  -webkit-mask-image: radial-gradient(
+    circle at 50% 50%,
+    transparent 16%,
+    #000 36%,
+    rgba(0, 0, 0, 0.4) 55%,
+    transparent 74%
+  );
+  mask-image: radial-gradient(
+    circle at 50% 50%,
+    transparent 16%,
+    #000 36%,
+    rgba(0, 0, 0, 0.4) 55%,
+    transparent 74%
+  );
+  pointer-events: none;
+}
+
+.node-radiance[data-led-colors='true'] .node-radiance__plate {
+  /* Fixed in spin space — parent rotation carries the hue wheel */
+  background: conic-gradient(
+    from 0deg,
+    #00e5ff,
+    #9500ff,
+    #ff1744,
+    #ffd000,
+    #00ff95,
+    #00e5ff
+  );
+}
+
+.node-radiance[data-led-colors='true'] .node-radiance__bloom {
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(0, 229, 255, calc(0.35 + 0.3 * var(--led-amp))) 0%,
+    rgba(149, 0, 255, 0.12) 30%,
+    rgba(255, 208, 0, 0.05) 48%,
+    transparent 62%
+  );
+}
+
+.node-radiance[data-led-inside='true'] .node-radiance__plate {
+  opacity: 1;
+  filter: blur(5px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-radiance,
+  .node-radiance__bloom,
+  .node-radiance__luma {
+    animation: none;
+    opacity: 0.95;
+  }
+}
+
+/*
+ * Workflow nodes — Vercel-style eclipse backlight (static).
+ * Blurred white plate matches the card silhouette and sits behind an opaque
+ * face so light only peeks around the border. No spin / crawl.
+ */
+.wf-node {
+  position: relative;
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+  overflow: visible;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #e4e4e7;
+}
+
+.wf-node__shell {
+  position: relative;
+  overflow: visible;
+}
+
+/* Glow layer behind the face — sized to the card */
+.wf-node__backlight {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* Soft spill into the field (wider, dimmer) */
+.wf-node__backlight-bloom {
+  position: absolute;
+  inset: -18%;
+  border-radius: 1.35rem;
+  background: radial-gradient(
+    ellipse 65% 60% at 62% 38%,
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(255, 255, 255, 0.08) 42%,
+    transparent 72%
+  );
+  filter: blur(16px);
+}
+
+/*
+ * Hard rim plate — same rounded rect as the face, offset toward the light.
+ * Face occludes the center; blur fringe is what “peaks out” around the edge.
+ */
+.wf-node__backlight-plate {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.9rem;
+  background: #ffffff;
+  filter: blur(9px);
+  opacity: 0.82;
+  transform: translate(3px, -2px);
+}
+
+.wf-node[data-status='running'] .wf-node__backlight-plate {
+  opacity: 1;
+  filter: blur(8px);
+}
+
+.wf-node[data-status='running'] .wf-node__backlight-bloom {
+  background: radial-gradient(
+    ellipse 65% 60% at 62% 38%,
+    rgba(255, 255, 255, 0.4) 0%,
+    rgba(255, 255, 255, 0.12) 42%,
+    transparent 72%
+  );
+}
+
+/* Opaque face — covers plate center (sharp silhouette) */
+.wf-node__face {
+  position: relative;
+  z-index: 1;
+  min-width: 11rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #000000;
+  border-radius: 0.9rem;
+  padding: 0.7rem 0.85rem;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+.wf-node[data-status='running'] .wf-node__face {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.wf-node[data-status='completed'] .wf-node__face {
+  opacity: 0.78;
+}
+
+.wf-node[data-status='completed'] .wf-node__backlight {
+  opacity: 0.55;
+}
+
+.wf-node__body {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.wf-node__status {
+  margin-top: 0.5rem;
+}
+
+.wf-node__sprite {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  flex-shrink: 0;
+}
+
+.wf-node__sprite img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+@keyframes wf-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.wf-toast {
+  animation: wf-toast-in 180ms ease-out both;
+}
+
+.wf-graph .react-flow__node {
+  overflow: visible !important;
+}
+
+.wf-graph .react-flow__edge-path {
+  stroke: #9a9aa3 !important;
+  stroke-width: 1.35;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.22));
+}
+
+.wf-graph .react-flow__renderer,
+.wf-graph .react-flow__pane {
+  background-color: #07070a !important;
+}
+
+.wf-graph .react-flow__background {
+  background-color: #07070a !important;
+}
+
+/* Keep floating chrome above the shared field vignette */
+.wf-graph .react-flow__controls {
+  z-index: 5;
+}
+
+.wf-graph .react-flow__edge-text {
+  fill: #71717a !important;
+}
+
+.wf-graph .react-flow__controls {
+  background: #0a0a0e;
+  border: 1px solid rgba(63, 63, 70, 0.8);
+  border-radius: 0.6rem;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.wf-graph .react-flow__controls-button {
+  background: #0a0a0e;
+  border-bottom: 1px solid rgba(63, 63, 70, 0.8);
+  fill: #a1a1aa;
+}
+
+.wf-graph .react-flow__controls-button:hover {
+  background: #18181b;
+}
+
+.wf-graph .react-flow__attribution {
+  display: none;
+}
+
+.node-bit-face {
+  position: relative;
+  z-index: 1;
+}
+
+.node-bit-avatar {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/*
+ * Workspace marker — vertical filament lit with the node radiance stack
+ * (bloom + offset plate + luminosity + noise). Shape is a line, not a disc.
+ * No breath / fade-in animation.
+ */
+.pane-illumine {
+  --led-angle: -48deg;
+  --led-amp: 0.42;
+  --led-shift: calc(1.5px + 2px * var(--led-amp));
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  height: auto;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 1;
+}
+
+.pane-illumine[data-active='true'] {
+  --led-amp: 0.48;
+}
+
+.pane-illumine[data-active='false'] {
+  --led-amp: 0.18;
+  opacity: 0.5;
+}
+
+/* Soft spill along the filament */
+.pane-illumine__bloom {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 10px;
+  height: 100%;
+  transform: translateY(-50%)
+    translate(
+      calc(cos(var(--led-angle)) * var(--led-shift)),
+      calc(sin(var(--led-angle)) * var(--led-shift))
+    );
+  background: radial-gradient(
+    ellipse 40% 55% at 10% 50%,
+    rgba(255, 255, 255, calc(0.1 + 0.1 * var(--led-amp))) 0%,
+    rgba(255, 255, 255, calc(0.03 + 0.03 * var(--led-amp))) 40%,
+    transparent 58%
+  );
+  filter: blur(2.5px);
+  mix-blend-mode: screen;
+}
+
+/* Offset backlight plate — thin vertical bar, eclipse rim toward light */
+.pane-illumine__plate {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1.5px;
+  height: 100%;
+  border-radius: 0;
+  background: #ffffff;
+  filter: blur(calc(1.25px + 0.75px * var(--led-amp)));
+  opacity: calc(0.2 + 0.22 * var(--led-amp));
+  mix-blend-mode: plus-lighter;
+  transform: translate(
+    calc(cos(var(--led-angle)) * var(--led-shift)),
+    calc(sin(var(--led-angle)) * var(--led-shift))
+  );
+}
+
+@supports not (mix-blend-mode: plus-lighter) {
+  .pane-illumine__plate {
+    mix-blend-mode: screen;
+  }
+}
+
+/* Luminosity wash — white→black dissolve along the line */
+.pane-illumine__luma {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 12px;
+  height: 100%;
+  transform: translateY(-50%)
+    translate(
+      calc(cos(var(--led-angle)) * 2px * var(--led-amp)),
+      calc(sin(var(--led-angle)) * 2px * var(--led-amp))
+    );
+  background: radial-gradient(
+    ellipse 35% 55% at 8% 50%,
+    #f2f2f2 0%,
+    #bdbdbd 14%,
+    #6e6e6e 34%,
+    #2a2a2a 56%,
+    #0a0a0a 74%,
+    #000000 88%
+  );
+  mix-blend-mode: luminosity;
+  filter: blur(2.5px);
+  opacity: calc(0.12 + 0.12 * var(--led-amp));
+}
+
+.pane-illumine__noise {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 10px;
+  height: 100%;
+  transform: translateY(-50%)
+    translate(
+      calc(cos(var(--led-angle)) * var(--led-shift)),
+      calc(sin(var(--led-angle)) * var(--led-shift))
+    );
+  opacity: calc(0.08 + 0.06 * var(--led-amp));
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 48px 48px;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    rgba(0, 0, 0, 0.4) 40%,
+    transparent 85%
+  );
+  mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    rgba(0, 0, 0, 0.4) 40%,
+    transparent 85%
+  );
+}
+
+/* Sharp vertical filament (occluder / core) */
+.pane-illumine__core {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1.5px;
+  height: 100%;
+  border-radius: 0;
+  background: #e8e8ec;
+  box-shadow:
+    0 0 2px rgba(255, 255, 255, calc(0.08 + 0.14 * var(--led-amp))),
+    0 0 4px rgba(255, 255, 255, calc(0.03 + 0.06 * var(--led-amp)));
+  opacity: calc(0.55 + 0.45 * var(--led-amp));
+  z-index: 1;
+}
+
+/*
+ * Nav active marker — same radiance stack as pane-illumine, horizontal underline.
+ */
+.nav-illumine {
+  --led-angle: -90deg;
+  --led-amp: 0.48;
+  --led-shift: calc(1px + 1.5px * var(--led-amp));
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 18px;
+  height: 8px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  overflow: visible;
+  z-index: 1;
+}
+
+.nav-illumine__bloom {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 100%;
+  height: 10px;
+  transform: translateX(-50%)
+    translate(
+      calc(cos(var(--led-angle)) * var(--led-shift)),
+      calc(sin(var(--led-angle)) * var(--led-shift))
+    );
+  background: radial-gradient(
+    ellipse 55% 40% at 50% 90%,
+    rgba(255, 255, 255, calc(0.12 + 0.12 * var(--led-amp))) 0%,
+    rgba(255, 255, 255, calc(0.04 + 0.04 * var(--led-amp))) 40%,
+    transparent 62%
+  );
+  filter: blur(2.5px);
+  mix-blend-mode: screen;
+}
+
+.nav-illumine__plate {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 1.5px;
+  background: #ffffff;
+  filter: blur(calc(1.25px + 0.75px * var(--led-amp)));
+  opacity: calc(0.22 + 0.24 * var(--led-amp));
+  mix-blend-mode: plus-lighter;
+  transform: translate(
+    calc(cos(var(--led-angle)) * var(--led-shift)),
+    calc(sin(var(--led-angle)) * var(--led-shift))
+  );
+}
+
+@supports not (mix-blend-mode: plus-lighter) {
+  .nav-illumine__plate {
+    mix-blend-mode: screen;
+  }
+}
+
+.nav-illumine__luma {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 100%;
+  height: 12px;
+  transform: translateX(-50%)
+    translate(
+      calc(cos(var(--led-angle)) * 2px * var(--led-amp)),
+      calc(sin(var(--led-angle)) * 2px * var(--led-amp))
+    );
+  background: radial-gradient(
+    ellipse 55% 35% at 50% 92%,
+    #f2f2f2 0%,
+    #bdbdbd 14%,
+    #6e6e6e 34%,
+    #2a2a2a 56%,
+    #0a0a0a 74%,
+    transparent 92%
+  );
+  border-radius: 50%;
+  mix-blend-mode: luminosity;
+  filter: blur(2.5px);
+  opacity: calc(0.14 + 0.14 * var(--led-amp));
+}
+
+.nav-illumine__noise {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 100%;
+  height: 10px;
+  transform: translateX(-50%)
+    translate(
+      calc(cos(var(--led-angle)) * var(--led-shift)),
+      calc(sin(var(--led-angle)) * var(--led-shift))
+    );
+  opacity: calc(0.08 + 0.06 * var(--led-amp));
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 48px 48px;
+  -webkit-mask-image: linear-gradient(
+    to top,
+    #000 0%,
+    rgba(0, 0, 0, 0.4) 40%,
+    transparent 85%
+  );
+  mask-image: linear-gradient(
+    to top,
+    #000 0%,
+    rgba(0, 0, 0, 0.4) 40%,
+    transparent 85%
+  );
+}
+
+.nav-illumine__core {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 1.5px;
+  border-radius: 1px;
+  background: #e8e8ec;
+  box-shadow:
+    0 0 2px rgba(255, 255, 255, calc(0.1 + 0.16 * var(--led-amp))),
+    0 0 5px rgba(255, 255, 255, calc(0.04 + 0.08 * var(--led-amp)));
+  opacity: calc(0.6 + 0.4 * var(--led-amp));
+  z-index: 1;
+}
+
+.node-link-bead {
+  offset-rotate: 0deg;
+  animation: pulse-bead 2.4s linear infinite;
+}

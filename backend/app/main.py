@@ -145,12 +145,13 @@ async def unhandled_exception(request: Request, exc: Exception):
 
 # ── Health check ────────────────────────────────────────────────────────────
 
-@app.get("/health")
-async def health():
+def _probe_components() -> dict:
+    """Sync probes — must not run on the asyncio event loop."""
     components = {"database": "ok", "redis": "unknown", "celery": "unknown", "chromadb": "unknown"}
     from app.memory_store import memory_store
+
     components["chromadb"] = memory_store.health_check()
-    # Quick DB check
+
     try:
         db = SessionLocal()
         from sqlalchemy import text
@@ -160,7 +161,6 @@ async def health():
     except Exception as e:
         components["database"] = f"error: {e}"
 
-    # Redis check
     try:
         from urllib.parse import urlparse
 
@@ -171,7 +171,8 @@ async def health():
             host=parsed.hostname or "127.0.0.1",
             port=parsed.port or 6379,
             password=parsed.password or None,
-            socket_timeout=2,
+            socket_timeout=0.5,
+            socket_connect_timeout=0.5,
         )
         if r.ping():
             components["redis"] = "ok"
@@ -181,18 +182,29 @@ async def health():
     except Exception as e:
         components["redis"] = f"error: {e}"
 
-    # Celery check — inspect active workers via Redis
-    try:
-        from app.celery_app import celery_app
-        insp = celery_app.control.inspect(timeout=2)
-        active = insp.active()
-        if active:
-            components["celery"] = "ok"
-        else:
-            components["celery"] = "error: no workers"
-    except Exception as e:
-        components["celery"] = f"error: {e}"
+    # Only poke Celery when Redis is reachable (inspect talks to the broker)
+    if components["redis"] == "ok":
+        try:
+            from app.celery_app import celery_app
+            insp = celery_app.control.inspect(timeout=0.5)
+            active = insp.active()
+            if active:
+                components["celery"] = "ok"
+            else:
+                components["celery"] = "error: no workers"
+        except Exception as e:
+            components["celery"] = f"error: {e}"
+    else:
+        components["celery"] = "skipped: redis unavailable"
 
+    return components
+
+
+@app.get("/health")
+async def health():
+    import asyncio
+
+    components = await asyncio.to_thread(_probe_components)
     return {
         "status": "ok",
         "version": VERSION,

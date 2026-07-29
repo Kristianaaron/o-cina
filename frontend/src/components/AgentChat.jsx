@@ -6,11 +6,13 @@ const API_BASE = import.meta.env.VITE_API_URL || ''
 export default function AgentChat({
   agentId,
   agentName,
+  projectId = null,
   externalMessages,
   onMessagesChange,
   externalSessionId,
   onSessionIdChange,
   onToggleTerminal,
+  hideHeader = false,
 }) {
   // Use external (shared) state if provided, otherwise internal
   const [internalMessages, setInternalMessages] = useState([])
@@ -56,6 +58,7 @@ export default function AgentChat({
           agent_id: agentId,
           prompt: text,
           session_id: sessionId,
+          ...(projectId ? { project_id: projectId } : {}),
         }),
       })
 
@@ -206,34 +209,51 @@ export default function AgentChat({
   }
 
   return (
-    <div className="flex flex-col h-96">
+    <div className="flex h-96 flex-col">
       {/* Chat header */}
-      <div className="flex items-center px-3 py-1 bg-zinc-900 border-t border-zinc-800 text-xs font-mono">
-        <span className="text-zinc-400">chat with</span>
-        <span className="text-zinc-200 ml-1">{agentName || agentId?.slice(0, 8)}</span>
-        {sessionId && (
-          <>
-            <span className="text-zinc-600 mx-1">|</span>
-            <span className="text-zinc-500" title={sessionId}>session active</span>
-          </>
-        )}
-        <div className="flex-1" />
-        {/* Terminal toggle */}
-        {onToggleTerminal && (
+      {!hideHeader && (
+        <div className="flex items-center border-t border-zinc-800 bg-zinc-900 px-3 py-1 font-mono text-xs">
+          <span className="text-zinc-400">chat with</span>
+          <span className="ml-1 text-zinc-200">{agentName || agentId?.slice(0, 8)}</span>
+          {sessionId && (
+            <>
+              <span className="mx-1 text-zinc-600">|</span>
+              <span className="text-zinc-500" title={sessionId}>session active</span>
+            </>
+          )}
+          <div className="flex-1" />
+          {onToggleTerminal && (
+            <button
+              type="button"
+              onClick={onToggleTerminal}
+              className="mr-2 text-xs text-zinc-500 underline hover:text-zinc-300"
+              title="Switch to terminal (TUI) view"
+            >
+              [TUI]
+            </button>
+          )}
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={clearChat}
+              className="text-xs text-zinc-500 underline hover:text-zinc-300"
+            >
+              clear
+            </button>
+          )}
+        </div>
+      )}
+      {hideHeader && messages.length > 0 && (
+        <div className="flex justify-end border-b border-zinc-800/80 bg-zinc-950 px-3 py-1">
           <button
-            onClick={onToggleTerminal}
-            className="text-zinc-500 hover:text-zinc-300 underline text-xs mr-2"
-            title="Switch to terminal (TUI) view"
+            type="button"
+            onClick={clearChat}
+            className="font-mono text-[10px] text-zinc-500 underline hover:text-zinc-300"
           >
-            [TUI]
-          </button>
-        )}
-        {messages.length > 0 && (
-          <button onClick={clearChat} className="text-zinc-500 hover:text-zinc-300 underline text-xs">
             clear
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-zinc-950">
@@ -304,7 +324,9 @@ export default function AgentChat({
             {sending ? '···' : 'Send'}
           </button>
         </div>
-        <p className="text-xs text-zinc-600 font-mono mt-1">Enter to send · Shift+Enter for newline · [TUI] for terminal view</p>
+        <p className="mt-1 font-mono text-xs text-zinc-600">
+          Enter to send · Shift+Enter for newline
+        </p>
       </div>
     </div>
   )

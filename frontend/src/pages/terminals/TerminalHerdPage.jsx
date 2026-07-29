@@ -22,15 +22,15 @@ export default function TerminalHerdPage() {
   }, [dispatch])
 
   return (
-    <div className="h-[calc(100vh-7.5rem)] min-h-[480px] -mx-4 sm:mx-0 rounded-lg border border-zinc-800 overflow-hidden flex flex-col">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-800 bg-zinc-950 shrink-0">
+    <div className="flex h-[calc(100vh-7rem)] min-h-[420px] flex-col overflow-hidden rounded-lg border border-zinc-800">
+      <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-950 px-3 py-1.5">
         <div className="font-mono text-xs text-zinc-400">
           Terminal herd
-          <span className="text-zinc-600 mx-2">·</span>
-          <span className="text-zinc-500">GUI chat stays on agent pages — this is the multiplexer</span>
+          <span className="mx-2 text-zinc-600">·</span>
+          <span className="text-zinc-500">multiplexer</span>
         </div>
         <Link to="/agents" className="font-mono text-[11px] text-zinc-500 hover:text-zinc-300">
-          ← Agents
+          Agents →
         </Link>
       </div>
       {error && (
