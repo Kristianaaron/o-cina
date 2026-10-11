@@ -12,6 +12,7 @@ import {
   CircleCheck,
   CirclePlus,
   Columns2,
+  Command,
   FolderKanban,
   GitBranch,
   GitFork,
@@ -19,8 +20,17 @@ import {
   Mic,
   Monitor,
   PanelsTopLeft,
+  Maximize2,
+  Minimize2,
+  Palette,
+  Play,
+  Plus,
+  RotateCw,
   Rows2,
+  Square,
+  SquareTerminal,
   Trash2,
+  X,
   Waypoints,
   Workflow,
 } from 'lucide-react'
@@ -52,8 +62,8 @@ export function IconAgents(props) {
   return lucide(Bot, props)
 }
 
-/** Chamber “Panes” / panel multiplexer */
-export function IconHerd(props) {
+/** Chamber “Panes” multiplexer */
+export function IconPanes(props) {
   return lucide(PanelsTopLeft, props)
 }
 
@@ -129,4 +139,44 @@ export function IconSplitColumns(props) {
 /** Stacked split (horizontal divider) */
 export function IconSplitRows(props) {
   return lucide(Rows2, props)
+}
+
+export function IconCommand(props) {
+  return lucide(Command, props)
+}
+
+export function IconAdd(props) {
+  return lucide(Plus, props)
+}
+
+export function IconClose(props) {
+  return lucide(X, props)
+}
+
+export function IconMaximize(props) {
+  return lucide(Maximize2, props)
+}
+
+export function IconMinimize(props) {
+  return lucide(Minimize2, props)
+}
+
+export function IconPlay(props) {
+  return lucide(Play, props)
+}
+
+export function IconStop(props) {
+  return lucide(Square, props)
+}
+
+export function IconRestart(props) {
+  return lucide(RotateCw, props)
+}
+
+export function IconTerminal(props) {
+  return lucide(SquareTerminal, props)
+}
+
+export function IconPalette(props) {
+  return lucide(Palette, props)
 }

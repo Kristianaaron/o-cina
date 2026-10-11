@@ -751,3 +751,262 @@
   offset-rotate: 0deg;
   animation: pulse-bead 2.4s linear infinite;
 }
+
+/* ── Revamp chrome ─────────────────────────────────────────────────────── */
+
+@keyframes ui-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ui-pop {
+  animation: ui-pop-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Focused pane — light leaking along the top edge, same white as the nodes */
+.pane-focus-line {
+  position: absolute;
+  inset: 0 12% auto 12%;
+  z-index: 2;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7) 50%, transparent);
+  box-shadow: 0 0 10px 1px rgba(255, 255, 255, 0.18);
+}
+
+.xterm .xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+::selection {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-pop {
+    animation: none;
+  }
+}
+
+/* ── Node field: deep space ────────────────────────────────────────────── */
+
+.space-backdrop {
+  --tilt-x: 0;
+  --tilt-y: 0;
+  background: radial-gradient(ellipse 90% 70% at 50% 42%, #050507 0%, #020203 75%);
+}
+
+@keyframes space-drift {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 3% -2%;
+  }
+}
+
+.space-nebula {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.45;
+  transform: translate(calc(var(--tilt-x) * -26px), calc(var(--tilt-y) * -18px));
+  animation: space-drift 46s ease-in-out infinite;
+  transition: background 900ms ease;
+}
+
+.space-nebula--a {
+  left: 8%;
+  top: 6%;
+  width: 46vw;
+  height: 34vw;
+  background: radial-gradient(circle at 40% 45%, rgba(255, 255, 255, 0.05), transparent 65%);
+}
+
+.space-nebula--b {
+  right: 2%;
+  top: 22%;
+  width: 40vw;
+  height: 30vw;
+  background: radial-gradient(circle at 55% 50%, rgba(255, 255, 255, 0.055), transparent 62%);
+  animation-duration: 58s;
+  animation-direction: reverse;
+}
+
+.space-nebula--c {
+  left: 30%;
+  bottom: 18%;
+  width: 52vw;
+  height: 22vw;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.035), transparent 66%);
+  animation-duration: 64s;
+}
+
+.space-backdrop[data-led-colors='true'] .space-nebula--a {
+  background: radial-gradient(circle at 40% 45%, rgba(0, 229, 255, 0.09), transparent 65%);
+}
+
+.space-backdrop[data-led-colors='true'] .space-nebula--b {
+  background: radial-gradient(circle at 55% 50%, rgba(149, 0, 255, 0.09), transparent 62%);
+}
+
+.space-backdrop[data-led-colors='true'] .space-nebula--c {
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 23, 68, 0.05), transparent 66%);
+}
+
+/* Node field vignette — same falloff as the shared one, into the darker space base */
+.space-vignette {
+  background: radial-gradient(
+    ellipse 72% 68% at 50% 48%,
+    transparent 40%,
+    rgba(2, 2, 3, 0.6) 72%,
+    #020203 100%
+  );
+}
+
+@keyframes space-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.space-enter {
+  animation: space-enter 1100ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .space-nebula,
+  .space-enter {
+    animation: none;
+  }
+}
+
+/* ── Pane canvas: fluid windows ────────────────────────────────────────── */
+
+.pane-canvas {
+  --pane-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pane-slot {
+  will-change: transform;
+}
+
+.pane-canvas.is-animated .pane-slot {
+  transition:
+    transform 340ms var(--pane-ease),
+    width 340ms var(--pane-ease),
+    height 340ms var(--pane-ease),
+    opacity 220ms ease;
+}
+
+@keyframes pane-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.pane-appear {
+  animation: pane-appear 260ms var(--pane-ease, ease-out) both;
+}
+
+/* Divider — invisible gutter; a filament of light appears on hover / drag */
+.pane-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+
+.pane-divider__line {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0);
+  transition: background 150ms ease, box-shadow 150ms ease, width 150ms ease, height 150ms ease;
+}
+
+.pane-divider[data-orientation='horizontal'] .pane-divider__line {
+  width: 1px;
+  height: min(48px, 40%);
+}
+
+.pane-divider[data-orientation='vertical'] .pane-divider__line {
+  width: min(48px, 40%);
+  height: 1px;
+}
+
+.pane-divider:hover .pane-divider__line {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.pane-divider[data-active='true'] .pane-divider__line {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 10px 1px rgba(255, 255, 255, 0.35);
+}
+
+.pane-divider[data-orientation='horizontal'][data-active='true'] .pane-divider__line {
+  height: 100%;
+}
+
+.pane-divider[data-orientation='vertical'][data-active='true'] .pane-divider__line {
+  width: 100%;
+}
+
+/* Dock preview — where the dragged pane will land */
+.pane-drop {
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+    0 0 32px rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform 180ms var(--pane-ease, ease-out),
+    width 180ms var(--pane-ease, ease-out),
+    height 180ms var(--pane-ease, ease-out);
+}
+
+.pane-drop__label {
+  border-radius: 999px;
+  background: rgba(7, 7, 10, 0.85);
+  padding: 0.25rem 0.6rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #e4e4e7;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane-canvas.is-animated .pane-slot,
+  .pane-drop {
+    transition: none;
+  }
+
+  .pane-appear {
+    animation: none;
+  }
+}

@@ -3,7 +3,7 @@ import 'xterm/css/xterm.css'
 
 /**
  * Single-agent xterm session.
- * Fills its parent; ResizeObserver keeps cols/rows in sync when herd panes resize.
+ * Fills its parent; ResizeObserver keeps cols/rows in sync when panes resize.
  */
 export default function AgentTerminal({
   agentId,
@@ -32,27 +32,43 @@ export default function AgentTerminal({
     let disposed = false
     let resizeObserver = null
     let fitTimer = null
+    let resizeTimer = null
     let dataDisposable = null
 
+    // Refit at most once per frame-ish while panes glide or get dragged, and only
+    // tell the PTY once the size settles — the program redraws once, not per frame.
+    let fitFrame = 0
+    let lastFit = 0
+    let sentDims = ''
+    function sendResize() {
+      const dims = fitAddonRef.current?.proposeDimensions()
+      if (!dims || wsRef.current?.readyState !== WebSocket.OPEN) return
+      const key = `${dims.cols}x${dims.rows}`
+      if (key === sentDims) return
+      sentDims = key
+      wsRef.current.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }))
+    }
+
     function scheduleFit() {
-      if (disposed) return
-      clearTimeout(fitTimer)
-      fitTimer = setTimeout(() => {
+      if (disposed || fitFrame) return
+      fitFrame = requestAnimationFrame((now) => {
+        fitFrame = 0
         if (disposed || !fitAddonRef.current || !xtermRef.current) return
+        if (now - lastFit < 48) {
+          // Throttled — make sure the final size still lands
+          clearTimeout(fitTimer)
+          fitTimer = setTimeout(scheduleFit, 50)
+          return
+        }
+        lastFit = now
         try {
           fitAddonRef.current.fit()
-          const dims = fitAddonRef.current.proposeDimensions()
-          if (dims && wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({
-              type: 'resize',
-              cols: dims.cols,
-              rows: dims.rows,
-            }))
-          }
         } catch {
           // ignore fit races during unmount
         }
-      }, 40)
+        clearTimeout(resizeTimer)
+        resizeTimer = setTimeout(sendResize, 140)
+      })
     }
 
     async function init() {
@@ -66,11 +82,12 @@ export default function AgentTerminal({
         fontSize: compact ? 12 : 13,
         fontFamily: '"IBM Plex Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace',
         theme: {
-          background: '#0a0a0f',
+          background: '#0b0b0f',
           foreground: '#c8c8cc',
-          cursor: '#c8c8cc',
-          selectionBackground: '#3a3a4f',
-          black: '#0a0a0f',
+          cursor: '#e4e4e7',
+          cursorAccent: '#0b0b0f',
+          selectionBackground: '#ffffff2e',
+          black: '#0b0b0f',
           red: '#e04e4e',
           green: '#4e9a4e',
           yellow: '#c8a84e',
@@ -122,6 +139,7 @@ export default function AgentTerminal({
         setConnected(true)
         setStatus('connected')
         if (focused) activeTerm.focus()
+        sentDims = '' // fresh PTY — always send our size once
         scheduleFit()
       }
 
@@ -173,6 +191,8 @@ export default function AgentTerminal({
       disposed = true
       clearTimeout(reconnectTimer)
       clearTimeout(fitTimer)
+      clearTimeout(resizeTimer)
+      cancelAnimationFrame(fitFrame)
       window.removeEventListener('resize', scheduleFit)
       resizeObserver?.disconnect()
       dataDisposable?.dispose()
@@ -193,8 +213,8 @@ export default function AgentTerminal({
   }, [focused, connected])
 
   const statusColors = {
-    connecting: 'text-amber-400',
-    connected: 'text-emerald-400',
+    connecting: 'text-amber-300',
+    connected: 'text-zinc-300',
     disconnected: 'text-zinc-500',
     error: 'text-red-400',
     exited: 'text-zinc-500',
@@ -206,11 +226,9 @@ export default function AgentTerminal({
       onMouseDown={onFocus}
     >
       {chrome && (
-        <div className={`flex items-center gap-2 px-2 py-1 bg-zinc-900/95 border-b border-zinc-800 text-[11px] font-mono shrink-0 ${
-          focused ? 'ring-1 ring-inset ring-emerald-700/60' : ''
-        }`}>
+        <div className="flex h-8 shrink-0 items-center gap-2 border-b border-white/[0.05] bg-ink-1 px-3 font-mono text-[11px]">
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-            connected ? 'bg-emerald-400' : 'bg-zinc-500'
+            connected ? 'bg-zinc-50 shadow-lit' : 'bg-zinc-600'
           }`} />
           <span className={`${statusColors[status] || 'text-zinc-500'} shrink-0`}>
             {status}
@@ -255,7 +273,7 @@ export default function AgentTerminal({
       )}
       <div
         ref={terminalRef}
-        className="flex-1 min-h-0 bg-[#0a0a0f] overflow-hidden"
+        className="flex-1 min-h-0 bg-ink-1 overflow-hidden"
         onClick={() => {
           onFocus?.()
           xtermRef.current?.focus()

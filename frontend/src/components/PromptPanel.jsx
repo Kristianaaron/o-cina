@@ -269,7 +269,7 @@ export default function PromptPanel({ open, onClose }) {
     <>
       <button
         type="button"
-        className="fixed inset-0 z-[45] border-0 bg-zinc-950/60 backdrop-blur-md"
+        className="fixed inset-0 z-[45] border-0 bg-ink-0/70 backdrop-blur-md"
         aria-label="Close prompt"
         onClick={handleClose}
       />
@@ -315,7 +315,7 @@ export default function PromptPanel({ open, onClose }) {
         aria-label="Prompt chat"
       >
         <div className="w-full max-w-xl">
-          <div className="relative flex min-h-10 items-end gap-1.5 rounded-2xl border border-zinc-700/70 bg-[#141416]/95 py-1 pl-3 pr-1 shadow-[0_12px_36px_rgba(0,0,0,0.5)] backdrop-blur-xl">
+          <div className="ui-pop relative flex min-h-10 items-end gap-1.5 rounded-2xl bg-ink-2/95 py-1 pl-3.5 pr-1 shadow-float backdrop-blur-xl focus-within:shadow-[0_16px_48px_rgba(0,0,0,0.55),0_0_0_1px_rgba(255,255,255,0.14)]">
             <textarea
               ref={inputRef}
               rows={1}
@@ -373,7 +373,7 @@ export default function PromptPanel({ open, onClose }) {
               <button
                 type="button"
                 onClick={handleClose}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
                 aria-label="Close prompt"
                 title="Close (Esc)"
               >
@@ -415,7 +415,7 @@ export default function PromptPanel({ open, onClose }) {
                   setError(null)
                   setLastMemoryCount(0)
                 }}
-                className="font-mono text-[10px] text-zinc-500 underline hover:text-zinc-300"
+                className="font-mono text-[10px] text-zinc-500 hover:text-zinc-300"
               >
                 clear
               </button>
@@ -437,7 +437,7 @@ function Turn({ msg, agent }) {
   if (msg.role === 'user') {
     return (
       <div className="ml-auto w-full max-w-[92%]">
-        <div className="rounded-xl border border-zinc-700/50 bg-zinc-900/70 px-3.5 py-2.5 text-[14px] leading-relaxed text-zinc-100 shadow-sm backdrop-blur-md">
+        <div className="rounded-xl bg-white/[0.05] px-3.5 py-2.5 text-[14px] leading-relaxed text-zinc-100 ring-1 ring-inset ring-white/[0.07] backdrop-blur-md">
           <p className="whitespace-pre-wrap">{msg.text}</p>
         </div>
       </div>
@@ -468,7 +468,7 @@ function Turn({ msg, agent }) {
           <span className="text-[11px] text-rose-400">Failed</span>
         )}
         {msg.memoryCount > 0 && (
-          <span className="rounded bg-zinc-800/80 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">
+          <span className="rounded-md bg-white/[0.05] px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">
             {msg.memoryCount} mem
           </span>
         )}
@@ -500,7 +500,7 @@ function MessageBody({ text }) {
           return (
             <pre
               key={i}
-              className="overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-950/90 p-3 font-mono text-[12px] leading-relaxed text-zinc-300"
+              className="overflow-x-auto rounded-xl bg-ink-1/90 p-3 ring-1 ring-inset ring-white/[0.06] font-mono text-[12px] leading-relaxed text-zinc-300"
             >
               {block.lang && (
                 <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-zinc-600">
@@ -546,7 +546,7 @@ function AgentPicker({ agents, agentId, agentLabel, menuOpen, setMenuOpen, onSel
       <button
         type="button"
         onClick={() => setMenuOpen((v) => !v)}
-        className="flex items-center gap-0.5 rounded-full px-1 py-0.5 text-zinc-300 transition-colors hover:bg-zinc-800/70"
+        className="flex items-center gap-0.5 rounded-full px-1 py-0.5 text-zinc-300 transition-colors hover:bg-white/[0.06]"
         aria-haspopup="listbox"
         aria-expanded={menuOpen}
         aria-label="Select agent"
@@ -560,7 +560,7 @@ function AgentPicker({ agents, agentId, agentLabel, menuOpen, setMenuOpen, onSel
       {menuOpen && (
         <ul
           role="listbox"
-          className="absolute bottom-[calc(100%+0.4rem)] right-0 z-10 max-h-48 min-w-[12rem] overflow-y-auto rounded-xl border border-zinc-700/80 bg-zinc-950 py-1 shadow-2xl"
+          className="ui-pop absolute bottom-[calc(100%+0.4rem)] right-0 z-10 max-h-56 min-w-[13rem] overflow-y-auto rounded-xl bg-ink-2 p-1 shadow-float"
         >
           {agents.length === 0 && (
             <li className="px-2.5 py-1.5 font-mono text-[11px] text-zinc-500">No agents</li>
@@ -574,8 +574,8 @@ function AgentPicker({ agents, agentId, agentLabel, menuOpen, setMenuOpen, onSel
                   type="button"
                   onClick={() => onSelect(a.id)}
                   className={[
-                    'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px] transition-colors',
-                    active ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-300 hover:bg-zinc-900',
+                    'flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] transition-colors',
+                    active ? 'bg-white/[0.07] text-zinc-100' : 'text-zinc-300 hover:bg-white/[0.04]',
                   ].join(' ')}
                 >
                   <span className="min-w-0 flex-1 truncate font-medium">{a.name}</span>
@@ -598,7 +598,7 @@ function ProjectPicker({ projects, projectId, selected, menuOpen, setMenuOpen, o
       <button
         type="button"
         onClick={() => setMenuOpen((v) => !v)}
-        className="flex items-center gap-0.5 rounded-full px-1 py-0.5 text-zinc-400 transition-colors hover:bg-zinc-800/70 hover:text-zinc-200"
+        className="flex items-center gap-0.5 rounded-full px-1 py-0.5 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
         aria-haspopup="listbox"
         aria-expanded={menuOpen}
         aria-label="Select project memory bank"
@@ -613,15 +613,15 @@ function ProjectPicker({ projects, projectId, selected, menuOpen, setMenuOpen, o
       {menuOpen && (
         <ul
           role="listbox"
-          className="absolute bottom-[calc(100%+0.4rem)] left-0 z-10 max-h-48 min-w-[12rem] overflow-y-auto rounded-xl border border-zinc-700/80 bg-zinc-950 py-1 shadow-2xl"
+          className="ui-pop absolute bottom-[calc(100%+0.4rem)] left-0 z-10 max-h-56 min-w-[13rem] overflow-y-auto rounded-xl bg-ink-2 p-1 shadow-float"
         >
           <li role="option" aria-selected={!projectId}>
             <button
               type="button"
               onClick={() => onSelect('')}
               className={[
-                'flex w-full px-2.5 py-1.5 text-left text-[12px] transition-colors',
-                !projectId ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-900',
+                'flex w-full rounded-lg px-2.5 py-1.5 text-left text-[12px] transition-colors',
+                !projectId ? 'bg-white/[0.07] text-zinc-100' : 'text-zinc-400 hover:bg-white/[0.04]',
               ].join(' ')}
             >
               No memory bank
@@ -635,8 +635,8 @@ function ProjectPicker({ projects, projectId, selected, menuOpen, setMenuOpen, o
                   type="button"
                   onClick={() => onSelect(p.id)}
                   className={[
-                    'flex w-full px-2.5 py-1.5 text-left text-[12px] transition-colors',
-                    active ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-300 hover:bg-zinc-900',
+                    'flex w-full rounded-lg px-2.5 py-1.5 text-left text-[12px] transition-colors',
+                    active ? 'bg-white/[0.07] text-zinc-100' : 'text-zinc-300 hover:bg-white/[0.04]',
                   ].join(' ')}
                 >
                   <span className="truncate">{p.name}</span>

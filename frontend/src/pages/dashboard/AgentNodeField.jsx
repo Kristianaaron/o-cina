@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import AgentNode from '../../components/dashboard/AgentNode'
 import AgentDetailSheet from '../../components/dashboard/AgentDetailSheet'
 import ConnectionLayer from '../../components/dashboard/ConnectionLayer'
+import SpaceBackdrop from '../../components/dashboard/SpaceBackdrop'
+import DepthHud from '../../components/dashboard/DepthHud'
 import {
   buildConnections,
   isAgentLive,
@@ -11,11 +12,16 @@ import {
 } from '../../lib/agentField'
 import { positionsFromNodes, syncForceSim } from '../../lib/forceGraph'
 import { configureLedDriver } from '../../lib/ledDriver'
+import { depthFor, floatOffset } from '../../lib/depth'
+import ChamberBar from '../../components/ChamberBar'
+import { Button, IconButton, cx } from '../../components/ui'
+import { IconPalette } from '../../components/icons'
 
 const MIN_ZOOM = 0.05
 const MAX_ZOOM = 4
 const ZOOM_STEP = 1.18
-const GRID_GAP = 48
+const INTRO_ZOOM = 0.84
+const INTRO_MS = 1400
 
 function clamp(n, lo, hi) {
   return Math.min(hi, Math.max(lo, n))
@@ -24,7 +30,7 @@ function clamp(n, lo, hi) {
 /**
  * Full-bleed "command chamber" — force-directed node-link field.
  */
-export default function AgentNodeField({ viewToggle = null }) {
+export default function AgentNodeField({ view = 'nodes', onViewChange }) {
   const [agents, setAgents] = useState([])
   const [workflowGraphs, setWorkflowGraphs] = useState([])
   const [tasks, setTasks] = useState([])
@@ -38,7 +44,11 @@ export default function AgentNodeField({ viewToggle = null }) {
   const pointerRef = useRef({ x: 0, y: 0, active: false })
   const fieldRef = useRef(null)
   const worldRef = useRef(null)
-  const gridRef = useRef(null)
+  const tiltRef = useRef({ x: 0, y: 0 })
+  const sizeRef = useRef({ w: 1, h: 1 })
+  const depthRef = useRef(new Map())
+  const introRef = useRef(0)
+  const positionsRef = useRef(null)
   const zoomLabelRef = useRef(null)
   const cameraRef = useRef({ x: 0, y: 0, zoom: 1 })
   const panRef = useRef(null)
@@ -58,12 +68,6 @@ export default function AgentNodeField({ viewToggle = null }) {
     const world = worldRef.current
     if (world) {
       world.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`
-    }
-    const grid = gridRef.current
-    if (grid) {
-      const gap = GRID_GAP * zoom
-      grid.style.backgroundSize = `${gap}px ${gap}px, ${gap}px ${gap}px`
-      grid.style.backgroundPosition = `${x}px ${y}px, ${x}px ${y}px`
     }
     if (zoomLabelRef.current) {
       zoomLabelRef.current.textContent = `${Math.round(zoom * 100)}%`
@@ -169,6 +173,49 @@ export default function AgentNodeField({ viewToggle = null }) {
     })
   }, [])
 
+  // Track field size (for px → % float offsets) without layout reads per frame
+  useEffect(() => {
+    const field = fieldRef.current
+    if (!field) return undefined
+    const ro = new ResizeObserver(([entry]) => {
+      sizeRef.current = {
+        w: Math.max(1, entry.contentRect.width),
+        h: Math.max(1, entry.contentRect.height),
+      }
+    })
+    ro.observe(field)
+    return () => ro.disconnect()
+  }, [])
+
+  // Arrival — the camera drifts in from slightly further out
+  useEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined
+    const field = fieldRef.current
+    if (!field) return undefined
+    const rect = field.getBoundingClientRect()
+    const cx = rect.left + rect.width / 2
+    const cy = rect.top + rect.height / 2
+    cameraRef.current = { x: 0, y: 0, zoom: 1 }
+    zoomAt(cx, cy, INTRO_ZOOM)
+    const from = { ...cameraRef.current }
+    const start = performance.now()
+    const token = ++introRef.current
+    const step = (now) => {
+      if (token !== introRef.current) return
+      const p = Math.min(1, (now - start) / INTRO_MS)
+      const e = 1 - (1 - p) ** 3
+      setCamera({
+        x: from.x * (1 - e),
+        y: from.y * (1 - e),
+        zoom: from.zoom + (1 - from.zoom) * e,
+      })
+      if (p < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+    return () => { introRef.current += 1 }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     load()
     const id = setInterval(load, 8000)
@@ -221,6 +268,7 @@ export default function AgentNodeField({ viewToggle = null }) {
     if (!field) return undefined
     const onWheel = (e) => {
       e.preventDefault()
+      introRef.current += 1
       const magnitude = Math.min(Math.abs(e.deltaY), 80)
       const sign = e.deltaY > 0 ? -1 : 1
       const factor = e.deltaMode === 0
@@ -257,10 +305,34 @@ export default function AgentNodeField({ viewToggle = null }) {
 
     let raf = 0
     let alive = true
-    const frame = () => {
+    const motion = !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const frame = (now) => {
       if (!alive || !forceRef.current) return
-      const next = forceRef.current.tick()
+      const base = forceRef.current.tick()
+
+      // Ease the pointer into a -1…1 tilt; settle back to level when it leaves
+      const pointer = pointerRef.current
+      const { w, h } = sizeRef.current
+      const tilt = tiltRef.current
+      const tx = motion && pointer.active ? clamp((pointer.x / window.innerWidth) * 2 - 1, -1, 1) : 0
+      const ty = motion && pointer.active ? clamp((pointer.y / window.innerHeight) * 2 - 1, -1, 1) : 0
+      tilt.x += (tx - tilt.x) * 0.05
+      tilt.y += (ty - tilt.y) * 0.05
+
+      // Float each node at its own depth — lines read the same positions, so they stay attached
+      const t = now / 1000
+      const next = new Map()
+      for (const [id, p] of base) {
+        let d = depthRef.current.get(id)
+        if (!d) {
+          d = depthFor(id)
+          depthRef.current.set(id, d)
+        }
+        const off = floatOffset(d, t, tilt, { motion })
+        next.set(id, { ...p, x: p.x + (off.x / w) * 100, y: p.y + (off.y / h) * 100, z: d.z })
+      }
       setPositions(next)
+      positionsRef.current = next
       raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
@@ -300,6 +372,7 @@ export default function AgentNodeField({ viewToggle = null }) {
     if (onNode && !middle && !spaceDownRef.current) return
 
     e.preventDefault()
+    introRef.current += 1
     panRef.current = {
       pointerId: e.pointerId,
       startX: e.clientX,
@@ -328,21 +401,18 @@ export default function AgentNodeField({ viewToggle = null }) {
   return (
     <div
       ref={fieldRef}
-      className="relative h-full min-h-0 touch-none overflow-hidden bg-[#07070a] cursor-grab"
+      className="relative h-full min-h-0 touch-none overflow-hidden bg-[#020203] cursor-grab"
       onPointerDown={onFieldPointerDown}
       onPointerMove={onFieldPointerMove}
       onPointerUp={endPan}
       onPointerCancel={endPan}
     >
-      <div
-        ref={gridRef}
-        className="node-field-grid pointer-events-none absolute inset-0 z-0"
-        aria-hidden
-      />
+      <SpaceBackdrop cameraRef={cameraRef} tiltRef={tiltRef} ledColors={ledColors} />
+      <DepthHud cameraRef={cameraRef} tiltRef={tiltRef} positionsRef={positionsRef} fieldRef={fieldRef} />
 
       <div
         ref={worldRef}
-        className="absolute inset-0 z-0 origin-top-left will-change-transform"
+        className="space-enter absolute inset-0 z-0 origin-top-left will-change-transform"
         style={{ transform: 'translate(0px, 0px) scale(1)' }}
       >
         <ConnectionLayer edges={connections} positions={positions} />
@@ -356,6 +426,7 @@ export default function AgentNodeField({ viewToggle = null }) {
                 index={index}
                 x={pos.x}
                 y={pos.y}
+                depth={pos.z ?? 0}
                 selected={selectedId === agent.id}
                 onSelect={onSelectAgent}
                 ledColors={ledColors}
@@ -367,67 +438,55 @@ export default function AgentNodeField({ viewToggle = null }) {
       </div>
 
       <div
-        className="node-field-vignette pointer-events-none absolute inset-0 z-[1]"
+        className="space-vignette pointer-events-none absolute inset-0 z-[1]"
         aria-hidden
       />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-wrap items-start justify-between gap-3 p-3 sm:p-4">
-        <div className="pointer-events-auto flex flex-col items-start gap-2">
-          <div className="rounded-xl border border-zinc-700/60 bg-zinc-950/75 px-3 py-2 backdrop-blur-md">
-            <div className="font-mono text-sm font-semibold tracking-wide text-zinc-100">
-              O-Cina Agent Space
-            </div>
-            <p className="mt-1 font-mono text-[10px] text-zinc-500">
-              {loading
-                ? '…'
-                : `${liveCount} agent${liveCount === 1 ? '' : 's'} active`}
-            </p>
+      <ChamberBar
+        floating
+        view={view}
+        onViewChange={onViewChange}
+        meta={(
+          <div className="flex items-center gap-3 font-mono text-[11px] text-zinc-500">
+            <span className="flex items-center gap-1.5 text-zinc-300">
+              <span className={cx('h-1.5 w-1.5 rounded-full', liveCount ? 'bg-zinc-50 shadow-lit' : 'bg-zinc-600')} />
+              {loading ? '…' : `${liveCount} live`}
+            </span>
+            <span className="hidden md:inline">{loading ? '…' : `${fieldAgents.length} nodes`}</span>
+            <span className="hidden md:inline">{loading ? '…' : `${connections.length} links`}</span>
+            <span className={cx('hidden lg:inline', health === 'Degraded' && 'text-amber-300')}>{health === '…' ? '…' : `field ${health.toLowerCase()}`}</span>
           </div>
-          {viewToggle}
-        </div>
-
-        <div className="pointer-events-auto flex flex-wrap gap-1.5">
-          <Chip label="NODES" value={loading ? '…' : fieldAgents.length} />
-          <Chip label="LIVE" value={loading ? '…' : liveCount} accent />
-          <Chip label="LINKS" value={loading ? '…' : connections.length} />
-          <Chip label="FIELD" value={health} />
-          <button
-            type="button"
+        )}
+        actions={(
+          <IconButton
+            label={ledColors ? 'LED: color' : 'LED: white'}
+            active={ledColors}
             onClick={onToggleLedColors}
-            className="rounded-lg border border-zinc-700/60 bg-zinc-950/75 px-2.5 py-1.5 text-left backdrop-blur-md hover:border-zinc-500"
-            title="Toggle LED colors"
+            className={ledColors ? '!text-fuchsia-300' : ''}
           >
-            <div className="font-mono text-[9px] uppercase tracking-wider text-zinc-600">LED</div>
-            <div className={`font-mono text-sm ${ledColors ? 'text-fuchsia-300' : 'text-zinc-100'}`}>
-              {ledColors ? 'Color' : 'White'}
-            </div>
-          </button>
-        </div>
-      </div>
+            <IconPalette className="h-4 w-4" />
+          </IconButton>
+        )}
+      />
 
       {error && (
-        <div className="absolute left-1/2 top-20 z-20 -translate-x-1/2 rounded-lg border border-red-900 bg-red-950/80 px-3 py-2 font-mono text-xs text-red-200">
+        <div className="absolute left-1/2 top-20 z-20 -translate-x-1/2 rounded-xl bg-red-500/[0.08] px-3.5 py-2 font-mono text-[11px] text-red-300 ring-1 ring-inset ring-red-500/25 backdrop-blur-md">
           {error}
         </div>
       )}
 
       {!loading && fieldAgents.length === 0 && (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 px-6 text-center">
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 px-6 text-center">
           <p className="font-mono text-sm text-zinc-400">No agents in the field yet</p>
-          <Link
-            to="/agents"
-            className="rounded-lg bg-zinc-100 px-4 py-2 font-mono text-xs font-medium text-zinc-950 hover:bg-white"
-          >
-            Register an agent
-          </Link>
+          <Button variant="primary" to="/agents">Register an agent</Button>
         </div>
       )}
 
-      <div className="pointer-events-auto absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-10 flex items-center gap-0.5 rounded-xl border border-zinc-700/60 bg-zinc-950/80 p-1 backdrop-blur-md sm:bottom-6">
+      <div className="pointer-events-auto absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-10 flex items-center gap-0.5 rounded-xl bg-ink-1/75 p-1 shadow-float backdrop-blur-xl sm:bottom-6">
         <button
           type="button"
           onClick={() => zoomBy(1 / ZOOM_STEP)}
-          className="flex h-8 w-8 items-center justify-center rounded-lg font-mono text-sm text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+          className="flex h-8 w-8 items-center justify-center rounded-lg font-mono text-sm text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-50"
           title="Zoom out"
           aria-label="Zoom out"
         >
@@ -437,7 +496,7 @@ export default function AgentNodeField({ viewToggle = null }) {
           type="button"
           ref={zoomLabelRef}
           onClick={resetCamera}
-          className="min-w-[3.25rem] rounded-lg px-1.5 py-1.5 font-mono text-[11px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+          className="min-w-[3.25rem] rounded-lg px-1.5 py-1.5 font-mono text-[11px] text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100"
           title="Reset view"
         >
           100%
@@ -445,7 +504,7 @@ export default function AgentNodeField({ viewToggle = null }) {
         <button
           type="button"
           onClick={() => zoomBy(ZOOM_STEP)}
-          className="flex h-8 w-8 items-center justify-center rounded-lg font-mono text-sm text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+          className="flex h-8 w-8 items-center justify-center rounded-lg font-mono text-sm text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-50"
           title="Zoom in"
           aria-label="Zoom in"
         >
@@ -461,15 +520,6 @@ export default function AgentNodeField({ viewToggle = null }) {
           onClose={() => setSelectedId(null)}
         />
       )}
-    </div>
-  )
-}
-
-function Chip({ label, value, accent }) {
-  return (
-    <div className="rounded-lg border border-zinc-700/60 bg-zinc-950/75 px-2.5 py-1.5 backdrop-blur-md">
-      <div className="font-mono text-[9px] uppercase tracking-wider text-zinc-600">{label}</div>
-      <div className={`font-mono text-sm ${accent ? 'text-emerald-300' : 'text-zinc-100'}`}>{value}</div>
     </div>
   )
 }

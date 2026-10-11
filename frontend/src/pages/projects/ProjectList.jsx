@@ -1,24 +1,24 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { listProjects, createProject, deleteProject } from '../../api/projects'
+import { IconAdd, IconProjects, IconTrash } from '../../components/icons'
+import { plural, timeAgo } from '../../lib/format'
+import {
+  Button,
+  EmptyState,
+  Field,
+  IconButton,
+  Input,
+  Modal,
+  Notice,
+  PageHeader,
+  Surface,
+  Tag,
+  Textarea,
+  inputClass,
+} from '../../components/ui'
 
-const TAG_COLORS = [
-  'bg-blue-500/20 text-blue-400',
-  'bg-purple-500/20 text-purple-400',
-  'bg-emerald-500/20 text-emerald-400',
-  'bg-amber-500/20 text-amber-400',
-  'bg-rose-500/20 text-rose-400',
-  'bg-cyan-500/20 text-cyan-400',
-]
-
-function Tag({ tag, index }) {
-  const color = TAG_COLORS[index % TAG_COLORS.length]
-  return (
-    <span className={`text-xs px-2 py-0.5 rounded font-mono ${color}`}>
-      {tag}
-    </span>
-  )
-}
+const EMPTY_FORM = { name: '', description: '', tags: '' }
 
 export default function ProjectList() {
   const navigate = useNavigate()
@@ -27,7 +27,7 @@ export default function ProjectList() {
   const [error, setError] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
   const [search, setSearch] = useState('')
-  const [form, setForm] = useState({ name: '', description: '', tags: '' })
+  const [form, setForm] = useState(EMPTY_FORM)
 
   const fetchProjects = async (searchQuery = '') => {
     try {
@@ -43,28 +43,27 @@ export default function ProjectList() {
     }
   }
 
-  useEffect(() => { fetchProjects() }, [])
-
-  const handleSearch = (e) => {
-    e.preventDefault()
-    fetchProjects(search)
-  }
+  // Initial load, then debounced search as you type
+  useEffect(() => {
+    const t = setTimeout(() => fetchProjects(search), search ? 250 : 0)
+    return () => clearTimeout(t)
+  }, [search])
 
   const handleCreate = async (e) => {
-    e.preventDefault()
+    e?.preventDefault()
     if (!form.name.trim()) return
     try {
-      const tags = form.tags.split(',').map(t => t.trim()).filter(Boolean)
+      const tags = form.tags.split(',').map((t) => t.trim()).filter(Boolean)
       await createProject({
         name: form.name.trim(),
         description: form.description.trim() || null,
         tags,
       })
-      setForm({ name: '', description: '', tags: '' })
+      setForm(EMPTY_FORM)
       setShowCreate(false)
-      fetchProjects()
-    } catch (e) {
-      setError(e.message)
+      fetchProjects(search)
+    } catch (err) {
+      setError(err.message)
     }
   }
 
@@ -78,155 +77,124 @@ export default function ProjectList() {
     }
   }
 
-  const timeAgo = (ts) => {
-    if (!ts) return ''
-    const diff = Date.now() / 1000 - ts
-    if (diff < 60) return 'just now'
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-    return `${Math.floor(diff / 86400)}d ago`
-  }
+  const open = (id) => navigate(`/projects/${id}`)
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-mono text-2xl font-semibold">Projects</h1>
-          <p className="text-zinc-500 text-sm mt-1">
-            Workspaces with sessions, memory, and agent assignments
-          </p>
-        </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="bg-zinc-100 text-zinc-950 px-4 py-2 text-sm font-medium rounded hover:bg-white transition-colors"
-        >
-          + New Project
-        </button>
-      </div>
+    <div>
+      <PageHeader
+        title="Projects"
+        subtitle={`${plural(projects.length, 'project')} · sessions and shared semantic memory`}
+        actions={(
+          <Button variant="primary" onClick={() => setShowCreate(true)}>
+            <IconAdd className="h-3.5 w-3.5" />
+            New project
+          </Button>
+        )}
+      />
 
-      {/* Search */}
-      <form onSubmit={handleSearch} className="flex gap-2">
+      <div className="mb-6">
         <input
-          type="text"
+          type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search projects..."
-          className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700"
+          placeholder="Search projects…"
+          className={`${inputClass} h-8 w-full py-0 text-xs sm:w-64`}
         />
-        <button type="submit" className="px-4 py-2 text-sm border border-zinc-700 rounded hover:border-zinc-600 transition-colors">
-          Search
-        </button>
-      </form>
+      </div>
 
-      {/* Error */}
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm rounded">
-          {error}
+      {error && <div className="mb-6"><Notice onDismiss={() => setError(null)}>{error}</Notice></div>}
+
+      <Modal
+        open={showCreate}
+        title="New project"
+        description="A project holds sessions and a memory bank agents can recall from."
+        onClose={() => setShowCreate(false)}
+        footer={(
+          <>
+            <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button variant="primary" onClick={handleCreate} disabled={!form.name.trim()}>Create</Button>
+          </>
+        )}
+      >
+        <form className="space-y-4" onSubmit={handleCreate}>
+          <Field label="Name">
+            <Input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="My project"
+              autoFocus
+            />
+          </Field>
+          <Field label="Description" hint="optional">
+            <Textarea
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={2}
+            />
+          </Field>
+          <Field label="Tags" hint="comma-separated">
+            <Input
+              value={form.tags}
+              onChange={(e) => setForm({ ...form, tags: e.target.value })}
+              placeholder="coding, research"
+            />
+          </Field>
+          <button type="submit" hidden />
+        </form>
+      </Modal>
+
+      {loading && projects.length === 0 ? (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {[0, 1].map((i) => <Surface key={i} className="h-36 animate-pulse" />)}
         </div>
-      )}
-
-      {/* Create form */}
-      {showCreate && (
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded p-5 space-y-4">
-          <h2 className="font-mono text-lg">New Project</h2>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-zinc-500 font-mono">Name *</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="My Project"
-                className="w-full mt-1 bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-zinc-700"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="text-xs text-zinc-500 font-mono">Description</label>
-              <textarea
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Optional description..."
-                rows={2}
-                className="w-full mt-1 bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-zinc-700"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-zinc-500 font-mono">Tags (comma-separated)</label>
-              <input
-                type="text"
-                value={form.tags}
-                onChange={(e) => setForm({ ...form, tags: e.target.value })}
-                placeholder="coding, research, deployment"
-                className="w-full mt-1 bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-zinc-700"
-              />
-            </div>
-          </div>
-          <div className="flex gap-2 justify-end">
-            <button
-              onClick={() => setShowCreate(false)}
-              className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-300"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleCreate}
-              className="bg-zinc-100 text-zinc-950 px-4 py-2 text-sm font-medium rounded hover:bg-white transition-colors"
-            >
-              Create
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Project list */}
-      {loading ? (
-        <div className="text-zinc-500 font-mono text-sm">Loading...</div>
       ) : projects.length === 0 ? (
-        <div className="text-center py-16 text-zinc-600">
-          <p className="font-mono">No projects yet.</p>
-          <p className="text-sm mt-1">Create one to get started.</p>
-        </div>
+        <EmptyState
+          icon={IconProjects}
+          title={search ? 'No projects match' : 'No projects yet'}
+          body="Projects give agents a shared, semantically indexed memory bank."
+          action={!search && <Button variant="primary" onClick={() => setShowCreate(true)}>New project</Button>}
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {projects.map((p) => (
-            <div
+            <Surface
               key={p.id}
-              className="bg-zinc-900/50 border border-zinc-800 rounded p-5 hover:border-zinc-700 transition-colors group"
+              interactive
+              role="button"
+              tabIndex={0}
+              onClick={() => open(p.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  open(p.id)
+                }
+              }}
+              className="group flex min-h-[9rem] flex-col p-5"
             >
-              <div className="flex items-start justify-between">
-                <div
-                  className="flex-1 cursor-pointer"
-                  onClick={() => navigate(`/projects/${p.id}`)}
-                >
-                  <h3 className="font-mono font-medium text-lg">{p.name}</h3>
-                  {p.description && (
-                    <p className="text-zinc-500 text-sm mt-1 line-clamp-2">{p.description}</p>
-                  )}
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate font-mono text-sm font-semibold text-zinc-50">{p.name}</h3>
+                  <p className="mt-1 line-clamp-2 text-[13px] text-zinc-500">{p.description || 'No description'}</p>
                 </div>
-                <button
-                  onClick={() => handleDelete(p.id)}
-                  className="text-zinc-700 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all text-sm px-2"
+                <IconButton
+                  label={`Delete ${p.name}`}
+                  size="sm"
+                  className="-mr-1.5 -mt-1 opacity-0 hover:!text-red-300 group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleDelete(p.id)
+                  }}
                 >
-                  ×
-                </button>
+                  <IconTrash className="h-3.5 w-3.5" />
+                </IconButton>
               </div>
-              {p.tags?.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                  {p.tags.map((tag, i) => (
-                    <Tag key={i} tag={tag} index={i} />
-                  ))}
+              <div className="mt-auto flex items-end justify-between gap-3 pt-4">
+                <div className="flex min-w-0 flex-wrap gap-1">
+                  {p.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}
                 </div>
-              )}
-              <div className="flex items-center gap-3 mt-4 text-xs text-zinc-600 font-mono">
-                <span>Created {timeAgo(p.created_at)}</span>
-                <span className="text-zinc-800">|</span>
-                <span onClick={() => navigate(`/projects/${p.id}`)} className="cursor-pointer text-zinc-500 hover:text-zinc-400">
-                  Open →
-                </span>
+                <span className="shrink-0 font-mono text-[10px] text-zinc-600">{timeAgo(p.created_at)}</span>
               </div>
-            </div>
+            </Surface>
           ))}
         </div>
       )}

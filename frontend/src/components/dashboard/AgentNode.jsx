@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from 'react'
 import { agentAvatarUrl, isAgentLive, shortLabel } from '../../lib/agentField'
 import { patchLedNodePos, registerLedNode } from '../../lib/ledDriver'
+import { depthStyle } from '../../lib/depth'
 
 /**
  * Live-node LED — Vercel triangle-led interaction model:
@@ -13,12 +14,14 @@ function AgentNode({
   index,
   x,
   y,
+  depth = 0,
   selected,
   onSelect,
   ledColors,
   onToggleLedColors,
 }) {
   const live = isAgentLive(agent.status)
+  const z = depthStyle(depth)
   const label = shortLabel(agent.name)
   const avatar = agentAvatarUrl(agent)
   const radianceRef = useRef(null)
@@ -66,7 +69,14 @@ function AgentNode({
         if (live && onToggleLedColors) onToggleLedColors()
       }}
       className="group absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none"
-      style={{ left: `${x}%`, top: `${y}%` }}
+      style={{
+        left: `${x}%`,
+        top: `${y}%`,
+        // Depth only scales/stacks the node (Tailwind transform vars) — its look is untouched
+        '--tw-scale-x': z.scale,
+        '--tw-scale-y': z.scale,
+        zIndex: selected ? 30 : z.zIndex,
+      }}
       aria-label={`${agent.name} (${agent.status})`}
       aria-pressed={selected}
     >
@@ -100,7 +110,7 @@ function AgentNode({
               'node-bit-face relative z-[1] h-full w-full overflow-hidden rounded-full transition-all duration-300',
               live
                 ? 'scale-100 bg-black'
-                : 'scale-[0.92] border border-zinc-800 bg-[#0a0a0e] opacity-45 grayscale',
+                : 'scale-[0.92] border border-zinc-800 bg-[#0a0a0e]',
               selected ? 'ring-2 ring-white/70 ring-offset-2 ring-offset-[#07070a]' : '',
               'group-hover:brightness-110',
             ].join(' ')}
@@ -108,7 +118,11 @@ function AgentNode({
             <img
               src={avatar}
               alt=""
-              className="node-bit-avatar absolute left-1/2 top-1/2 block h-[49%] w-[49%] -translate-x-1/2 -translate-y-1/2 object-contain object-center"
+              className={[
+                'node-bit-avatar absolute left-1/2 top-1/2 block h-[49%] w-[49%] -translate-x-1/2 -translate-y-1/2 object-contain object-center',
+                // Idle: dim the sprite, not the disc — the disc stays opaque
+                live ? '' : 'opacity-45 grayscale',
+              ].join(' ')}
               draggable={false}
               decoding="async"
               onError={(e) => {
@@ -152,6 +166,7 @@ function propsEqual(prev, next) {
     && prev.agent.name === next.agent.name
     && prev.x === next.x
     && prev.y === next.y
+    && prev.depth === next.depth
     && prev.selected === next.selected
     && prev.ledColors === next.ledColors
     && prev.index === next.index

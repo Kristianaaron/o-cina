@@ -71,7 +71,7 @@ describe('forceGraph', () => {
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(8)
   })
 
-  it('keeps a small herd compact but non-overlapping', () => {
+  it('keeps a small field compact but non-overlapping', () => {
     const agents = Array.from({ length: 6 }, (_, i) => ({
       id: `a${i}`,
       status: 'running',
@@ -95,7 +95,7 @@ describe('forceGraph', () => {
     handle.stop()
   })
 
-  it('opens spacing as the herd grows toward 100', () => {
+  it('opens spacing as the field grows toward 100', () => {
     const small = spacingForCount(6)
     const large = spacingForCount(100)
     expect(large.collideR).toBeGreaterThan(small.collideR)

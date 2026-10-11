@@ -3,35 +3,17 @@ import { useNavigate } from 'react-router-dom'
 import {
   listWorkflows, deleteWorkflow, createWorkflow, listTemplates,
 } from '../../api/workflows'
-import { IconPlus, IconTrash, IconWorkflows } from '../../components/icons'
-
-function timeAgo(ts) {
-  if (!ts) return ''
-  const diff = Date.now() / 1000 - ts
-  if (diff < 60) return 'just now'
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return `${Math.floor(diff / 86400)}d ago`
-}
-
-function ListBtn({ children, onClick, primary, className = '', ...rest }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={[
-        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-mono text-[11px] transition-colors disabled:opacity-50',
-        primary
-          ? 'border-zinc-200 bg-zinc-100 font-medium text-zinc-950 hover:bg-white'
-          : 'border-zinc-700/60 bg-zinc-950/60 text-zinc-300 hover:border-zinc-500 hover:text-zinc-100',
-        className,
-      ].join(' ')}
-      {...rest}
-    >
-      {children}
-    </button>
-  )
-}
+import { IconAdd, IconTrash, IconWorkflows } from '../../components/icons'
+import { plural, timeAgo } from '../../lib/format'
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  Modal,
+  Notice,
+  PageHeader,
+  Surface,
+} from '../../components/ui'
 
 export default function WorkflowList() {
   const navigate = useNavigate()
@@ -90,101 +72,73 @@ export default function WorkflowList() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="font-mono text-sm text-zinc-500">Loading workflows…</div>
-    )
-  }
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-mono text-2xl font-semibold">Workflows</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            DAG-based agent orchestration with guardrails
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <ListBtn onClick={loadTemplates}>From template</ListBtn>
-          <ListBtn onClick={() => handleNew(null)} primary>
-            <IconPlus className="h-3.5 w-3.5" />
-            New workflow
-          </ListBtn>
-        </div>
-      </div>
+    <div>
+      <PageHeader
+        title="Workflows"
+        subtitle={loading ? 'Loading…' : `${plural(workflows.length, 'workflow')} · DAG orchestration with guardrails`}
+        actions={(
+          <>
+            <Button onClick={loadTemplates}>From template</Button>
+            <Button variant="primary" onClick={() => handleNew(null)}>
+              <IconAdd className="h-3.5 w-3.5" />
+              New workflow
+            </Button>
+          </>
+        )}
+      />
 
-      {error && (
-        <div className="rounded-lg border border-red-900/40 bg-red-950/40 p-3 font-mono text-sm text-red-400">
-          {error}
-        </div>
-      )}
+      {error && <div className="mb-6"><Notice onDismiss={() => setError('')}>{error}</Notice></div>}
 
-      {showTemplates && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setShowTemplates(false)}
-        >
-          <div
-            className="w-full max-w-lg space-y-4 rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="wf-templates-title"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <h2 id="wf-templates-title" className="font-mono text-lg font-semibold text-zinc-100">
-                Workflow templates
-              </h2>
+      <Modal
+        open={showTemplates}
+        title="Start from a template"
+        description="Copies the graph and guardrails into a new workflow."
+        width="max-w-lg"
+        onClose={() => setShowTemplates(false)}
+      >
+        <div className="-mx-1 max-h-[55vh] space-y-2 overflow-y-auto px-1">
+          {templates.length === 0 ? (
+            <p className="font-mono text-xs text-zinc-500">No templates available.</p>
+          ) : (
+            templates.map((t) => (
               <button
+                key={t.name}
                 type="button"
-                onClick={() => setShowTemplates(false)}
-                className="text-zinc-500 transition-colors hover:text-white"
-                aria-label="Close"
+                onClick={() => handleNew(t)}
+                className="group block w-full rounded-xl bg-white/[0.02] p-4 text-left ring-1 ring-inset ring-white/[0.06] transition-colors hover:bg-white/[0.04] hover:ring-white/[0.14]"
               >
-                ✕
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-mono text-[13px] font-semibold text-zinc-100">{t.name}</h3>
+                  <span className="font-mono text-[10px] text-zinc-600 group-hover:text-zinc-300">Use →</span>
+                </div>
+                <p className="mt-1 text-xs text-zinc-500">{t.description}</p>
+                <p className="mt-2 font-mono text-[10px] text-zinc-600">
+                  {plural(t.nodes.length, 'node')} · {plural(t.edges.length, 'edge')}
+                </p>
               </button>
-            </div>
-            <div className="max-h-96 space-y-3 overflow-y-auto">
-              {templates.length === 0 ? (
-                <p className="font-mono text-sm text-zinc-500">No templates available.</p>
-              ) : (
-                templates.map((t) => (
-                  <div
-                    key={t.name}
-                    className="rounded-lg border border-zinc-700/60 bg-zinc-950/50 p-4 transition-colors hover:border-zinc-500"
-                  >
-                    <h3 className="font-mono text-sm font-semibold text-zinc-100">{t.name}</h3>
-                    <p className="mt-1 text-xs text-zinc-500">{t.description}</p>
-                    <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-zinc-600">
-                      {t.nodes.length} nodes · {t.edges.length} edges
-                    </p>
-                    <ListBtn
-                      onClick={() => handleNew(t)}
-                      primary
-                      className="mt-3"
-                    >
-                      Use template
-                    </ListBtn>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+            ))
+          )}
         </div>
-      )}
+      </Modal>
 
-      {workflows.length === 0 ? (
-        <div className="py-16 text-center text-zinc-600">
-          <IconWorkflows className="mx-auto mb-3 h-8 w-8 text-zinc-700" />
-          <p className="font-mono text-lg">No workflows yet</p>
-          <p className="mt-2 text-sm">Create one from scratch or use a template to get started.</p>
+      {loading ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map((i) => <Surface key={i} className="h-32 animate-pulse" />)}
         </div>
+      ) : workflows.length === 0 ? (
+        <EmptyState
+          icon={IconWorkflows}
+          title="No workflows yet"
+          body="Chain agents into a DAG with approvals, decisions and guardrails."
+          action={<Button variant="primary" onClick={() => handleNew(null)}>New workflow</Button>}
+        />
       ) : (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {workflows.map((wf) => (
-            <div
+            <Surface
               key={wf.id}
+              interactive
               role="button"
               tabIndex={0}
               onClick={() => navigate(`/workflows/${wf.id}`)}
@@ -194,37 +148,28 @@ export default function WorkflowList() {
                   navigate(`/workflows/${wf.id}`)
                 }
               }}
-              className="group relative flex cursor-pointer flex-col rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 transition-colors hover:border-zinc-600 focus:outline-none focus-visible:border-zinc-500"
+              className="group relative flex min-h-[8.5rem] flex-col p-4"
             >
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleDelete(wf.id)
-                }}
-                aria-label={`Delete ${wf.name}`}
-                className="absolute right-2.5 top-2.5 rounded p-1 text-zinc-100 opacity-50 transition-opacity hover:bg-zinc-800 hover:opacity-100 group-hover:opacity-100"
-              >
-                <IconTrash className="h-3.5 w-3.5" />
-              </button>
-
-              <h3 className="truncate pr-7 font-mono text-sm font-semibold text-zinc-100 group-hover:text-white">
-                {wf.name}
-              </h3>
-              {wf.description ? (
-                <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{wf.description}</p>
-              ) : (
-                <p className="mt-1 text-xs text-zinc-600">No description</p>
-              )}
-
-              <div className="mt-auto flex items-center justify-between gap-2 pt-3 font-mono text-[10px] uppercase tracking-wider text-zinc-600">
-                <span className="truncate">{wf.id.slice(0, 8)}</span>
-                <span className="shrink-0">
-                  {Object.keys(wf.guardrails || {}).length} rules
-                  {wf.updated_at ? ` · ${timeAgo(wf.updated_at)}` : ''}
-                </span>
+              <div className="flex items-start gap-3">
+                <h3 className="min-w-0 flex-1 truncate font-mono text-[13px] font-semibold text-zinc-50">{wf.name}</h3>
+                <IconButton
+                  label={`Delete ${wf.name}`}
+                  size="sm"
+                  className="-mr-1 -mt-1 opacity-0 hover:!text-red-300 group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleDelete(wf.id)
+                  }}
+                >
+                  <IconTrash className="h-3.5 w-3.5" />
+                </IconButton>
               </div>
-            </div>
+              <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{wf.description || 'No description'}</p>
+              <div className="mt-auto flex items-center justify-between gap-2 pt-4 font-mono text-[10px] text-zinc-600">
+                <span>{plural(Object.keys(wf.guardrails || {}).length, 'guardrail')}</span>
+                <span>{wf.updated_at ? timeAgo(wf.updated_at) : wf.id.slice(0, 8)}</span>
+              </div>
+            </Surface>
           ))}
         </div>
       )}

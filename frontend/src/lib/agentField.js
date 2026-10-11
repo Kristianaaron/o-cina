@@ -47,7 +47,7 @@ export function agentAvatarUrl(agent, { dim = false } = {}) {
 
 /**
  * Minimum cell pitch as % of field — keeps discs visually spaced (~3× disc at 1400px).
- * Large herds expand past the viewport; pan/zoom to explore.
+ * Large fields expand past the viewport; pan/zoom to explore.
  */
 const CELL_PITCH_PCT = 18
 
@@ -223,10 +223,10 @@ const DEMO_ROLES = [
   'Route', 'Parse', 'Fetch', 'Guard', 'Tune', 'Map', 'Scan', 'Relay',
 ]
 
-/** Preview herd size — keep small so Vercel LED radiance stays crisp. */
+/** Preview field size — keep small so Vercel LED radiance stays crisp. */
 export const DEMO_FIELD_COUNT = 6
 
-/** Preview herd — active agents so node view scale is visible. */
+/** Preview field — active agents so node view scale is visible. */
 export const DEMO_FIELD_AGENTS = Array.from({ length: DEMO_FIELD_COUNT }, (_, i) => {
   const role = DEMO_ROLES[i % DEMO_ROLES.length]
   const n = String(i + 1).padStart(3, '0')

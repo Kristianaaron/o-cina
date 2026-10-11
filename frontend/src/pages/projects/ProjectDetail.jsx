@@ -1,68 +1,67 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import {
-  getProject, listSessions, getSession, createSession, deleteSession,
+  getProject, listSessions, createSession, deleteSession,
   listMessages, addMessage,
   listMemories, createMemory, deleteMemory, searchMemories, memoryCount,
 } from '../../api/projects'
+import { IconAdd, IconClose, IconProjects } from '../../components/icons'
+import { plural, timeAgo } from '../../lib/format'
+import {
+  Button,
+  EmptyState,
+  Eyebrow,
+  IconButton,
+  Notice,
+  PageHeader,
+  Segmented,
+  Stat,
+  Surface,
+  Tag,
+  cx,
+  inputClass,
+} from '../../components/ui'
 
-const TABS = ['Overview', 'Sessions', 'Memory', 'Search']
+const TABS = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'sessions', label: 'Sessions' },
+  { value: 'memory', label: 'Memory' },
+  { value: 'search', label: 'Search' },
+]
 
-function TimeAgo({ ts }) {
-  if (!ts) return <span>-</span>
-  const diff = Date.now() / 1000 - ts
-  if (diff < 60) return <span>just now</span>
-  if (diff < 3600) return <span>{Math.floor(diff / 60)}m ago</span>
-  if (diff < 86400) return <span>{Math.floor(diff / 3600)}h ago</span>
-  return <span>{Math.floor(diff / 86400)}d ago</span>
-}
+const SOURCES = ['user', 'agent', 'system', 'workflow']
 
-// ── Overview Tab ─────────────────────────────────────────────────────────────
+// ── Overview ────────────────────────────────────────────────────────────────
 
 function OverviewTab({ project }) {
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-mono text-xl font-semibold">{project.name}</h2>
-        {project.description && (
-          <p className="text-zinc-500 mt-2 text-sm">{project.description}</p>
-        )}
-      </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2">
         <Stat label="Sessions" value={project.session_count || 0} />
         <Stat label="Memories" value={project.memory_count || 0} />
-        <Stat label="Created" value={<TimeAgo ts={project.created_at} />} />
+        <Stat label="Created" value={timeAgo(project.created_at)} />
       </div>
       {project.tags?.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {project.tags.map((tag, i) => (
-            <span key={i} className="text-xs px-2.5 py-1 rounded bg-zinc-800 text-zinc-400 font-mono">
-              {tag}
-            </span>
-          ))}
+        <div>
+          <Eyebrow className="mb-2">Tags</Eyebrow>
+          <div className="flex flex-wrap gap-1">
+            {project.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-function Stat({ label, value }) {
-  return (
-    <div className="bg-zinc-900/50 border border-zinc-800 rounded p-4">
-      <div className="text-2xl font-mono font-semibold">{value}</div>
-      <div className="text-xs text-zinc-500 mt-1 font-mono">{label}</div>
-    </div>
-  )
-}
+// ── Sessions ────────────────────────────────────────────────────────────────
 
-// ── Sessions Tab ─────────────────────────────────────────────────────────────
-
-function SessionsTab({ projectId, project }) {
+function SessionsTab({ projectId }) {
   const [sessions, setSessions] = useState([])
   const [activeSession, setActiveSession] = useState(null)
   const [messages, setMessages] = useState([])
   const [newMessage, setNewMessage] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [newSessionName, setNewSessionName] = useState('')
+  const [creating, setCreating] = useState(false)
   const [error, setError] = useState(null)
 
   const fetchSessions = async () => {
@@ -86,17 +85,17 @@ function SessionsTab({ projectId, project }) {
 
   useEffect(() => { fetchSessions() }, [projectId])
 
-  const handleCreateSession = async () => {
-    const summary = prompt('Session name:')
+  const handleCreateSession = async (e) => {
+    e.preventDefault()
+    const summary = newSessionName.trim()
     if (!summary) return
     try {
-      setLoading(true)
       await createSession({ project_id: projectId, summary })
+      setNewSessionName('')
+      setCreating(false)
       fetchSessions()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
+    } catch (err) {
+      setError(err.message)
     }
   }
 
@@ -121,117 +120,118 @@ function SessionsTab({ projectId, project }) {
       await addMessage(activeSession.id, { content: newMessage.trim() })
       setNewMessage('')
       loadMessages(activeSession.id)
-    } catch (e) {
-      setError(e.message)
+    } catch (err) {
+      setError(err.message)
     }
   }
 
   return (
-    <div className="flex min-h-[400px] gap-4 h-[calc(100dvh-8rem)]">
-      {/* Session list */}
-      <div className="w-72 flex-shrink-0 flex flex-col border border-zinc-800 rounded overflow-hidden">
-        <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
-          <span className="font-mono text-sm font-medium">Sessions</span>
-          <button
-            onClick={handleCreateSession}
-            disabled={loading}
-            className="text-xs bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded transition-colors"
-          >
-            + New
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {sessions.length === 0 ? (
-            <div className="p-4 text-zinc-600 text-sm text-center">No sessions yet</div>
-          ) : (
-            sessions.map((s) => (
+    <div className="space-y-4">
+      {error && <Notice onDismiss={() => setError(null)}>{error}</Notice>}
+      <Surface className="flex h-[min(68vh,40rem)] min-h-[24rem] overflow-hidden">
+        <div className="flex w-64 shrink-0 flex-col border-r border-white/[0.05]">
+          <div className="flex h-11 items-center justify-between px-3">
+            <Eyebrow>Sessions</Eyebrow>
+            <IconButton label="New session" size="sm" onClick={() => setCreating(true)}>
+              <IconAdd className="h-3.5 w-3.5" />
+            </IconButton>
+          </div>
+          {creating && (
+            <form onSubmit={handleCreateSession} className="px-2 pb-2">
+              <input
+                autoFocus
+                value={newSessionName}
+                onChange={(e) => setNewSessionName(e.target.value)}
+                onBlur={() => !newSessionName && setCreating(false)}
+                onKeyDown={(e) => e.key === 'Escape' && setCreating(false)}
+                placeholder="Session name ↵"
+                className={`${inputClass} h-8 py-0 text-xs`}
+              />
+            </form>
+          )}
+          <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
+            {sessions.length === 0 && !creating && (
+              <p className="px-2 py-4 text-center font-mono text-[11px] text-zinc-600">No sessions yet</p>
+            )}
+            {sessions.map((s) => (
               <div
                 key={s.id}
-                className={`p-3 border-b border-zinc-800/50 cursor-pointer transition-colors group ${
-                  activeSession?.id === s.id ? 'bg-zinc-800/50' : 'hover:bg-zinc-900/50'
-                }`}
+                role="button"
+                tabIndex={0}
                 onClick={() => {
                   setActiveSession(s)
                   loadMessages(s.id)
                 }}
+                className={cx(
+                  'group flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 transition-colors',
+                  activeSession?.id === s.id ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]',
+                )}
               >
-                <div className="text-sm font-medium truncate">{s.summary || 'Untitled'}</div>
-                <div className="text-xs text-zinc-600 mt-1 flex items-center gap-2">
-                  <span>{s.message_count} msgs</span>
-                  <span className="ml-auto">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteSession(s.id) }}
-                      className="opacity-0 group-hover:opacity-100 hover:text-red-400"
-                    >
-                      ×
-                    </button>
-                  </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] text-zinc-200">{s.summary || 'Untitled'}</div>
+                  <div className="mt-0.5 font-mono text-[10px] text-zinc-600">{plural(s.message_count || 0, 'message')}</div>
                 </div>
+                <IconButton
+                  label="Delete session"
+                  size="sm"
+                  className="opacity-0 hover:!text-red-300 group-hover:opacity-100"
+                  onClick={(e) => { e.stopPropagation(); handleDeleteSession(s.id) }}
+                >
+                  <IconClose className="h-3 w-3" />
+                </IconButton>
               </div>
-            ))
-          )}
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* Messages */}
-      <div className="flex-1 flex flex-col border border-zinc-800 rounded overflow-hidden">
-        {activeSession ? (
-          <>
-            <div className="p-3 border-b border-zinc-800 font-mono text-sm">
-              {activeSession.summary || 'Untitled'}
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messages.length === 0 ? (
-                <div className="text-zinc-600 text-sm text-center mt-8">No messages yet</div>
-              ) : (
-                messages.map((m) => (
-                  <div key={m.id} className={`flex ${m.from_agent ? 'justify-start' : 'justify-end'}`}>
-                    <div className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
-                      m.from_agent
-                        ? 'bg-zinc-800 text-zinc-300'
-                        : 'bg-zinc-100 text-zinc-900'
-                    }`}>
-                      {m.agent_name && (
-                        <div className="text-xs font-mono text-zinc-500 mb-1">{m.agent_name}</div>
-                      )}
-                      <div>{m.payload?.content || JSON.stringify(m.payload)}</div>
-                      <div className="text-xs text-zinc-500 mt-1">
-                        {new Date(m.timestamp * 1000).toLocaleTimeString()}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {activeSession ? (
+            <>
+              <div className="flex h-11 items-center border-b border-white/[0.05] px-4 font-mono text-[12px] text-zinc-200">
+                {activeSession.summary || 'Untitled'}
+              </div>
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                {messages.length === 0 ? (
+                  <p className="mt-8 text-center font-mono text-[11px] text-zinc-600">No messages yet</p>
+                ) : (
+                  messages.map((m) => (
+                    <div key={m.id} className={cx('flex', m.from_agent ? 'justify-start' : 'justify-end')}>
+                      <div className={cx(
+                        'max-w-[75%] rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed',
+                        m.from_agent ? 'bg-white/[0.03] text-zinc-300 ring-1 ring-inset ring-white/[0.05]' : 'bg-white/[0.07] text-zinc-100',
+                      )}>
+                        {m.agent_name && <div className="mb-1 font-mono text-[10px] text-zinc-500">{m.agent_name}</div>}
+                        <div className="whitespace-pre-wrap">{m.payload?.content || JSON.stringify(m.payload)}</div>
+                        <div className="mt-1 font-mono text-[10px] text-zinc-600">
+                          {new Date(m.timestamp * 1000).toLocaleTimeString()}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
+              <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-white/[0.05] p-3">
+                <input
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Add a message…"
+                  className={`${inputClass} h-8 py-0`}
+                />
+                <Button type="submit" variant="primary" disabled={!newMessage.trim()}>Send</Button>
+              </form>
+            </>
+          ) : (
+            <div className="flex flex-1 items-center justify-center font-mono text-[12px] text-zinc-600">
+              Select or create a session
             </div>
-            <form onSubmit={handleSendMessage} className="p-3 border-t border-zinc-800 flex gap-2">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-zinc-700"
-              />
-              <button
-                type="submit"
-                className="bg-zinc-100 text-zinc-950 px-4 py-2 text-sm font-medium rounded hover:bg-white transition-colors"
-              >
-                Send
-              </button>
-            </form>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-zinc-600">
-            <div className="text-center">
-              <p className="font-mono">Select or create a session</p>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </Surface>
     </div>
   )
 }
 
-// ── Memory Tab ───────────────────────────────────────────────────────────────
+// ── Memory ──────────────────────────────────────────────────────────────────
 
 function MemoryTab({ projectId }) {
   const [memories, setMemories] = useState([])
@@ -264,17 +264,13 @@ function MemoryTab({ projectId }) {
     e.preventDefault()
     if (!newMemory.trim()) return
     try {
-      const tags = newTags.split(',').map(t => t.trim()).filter(Boolean)
-      await createMemory(projectId, {
-        content: newMemory.trim(),
-        source,
-        tags,
-      })
+      const tags = newTags.split(',').map((t) => t.trim()).filter(Boolean)
+      await createMemory(projectId, { content: newMemory.trim(), source, tags })
       setNewMemory('')
       setNewTags('')
       fetchMemories()
-    } catch (e) {
-      setError(e.message)
+    } catch (err) {
+      setError(err.message)
     }
   }
 
@@ -288,106 +284,63 @@ function MemoryTab({ projectId }) {
     }
   }
 
-  const sourceBadge = (src) => {
-    const colors = {
-      user: 'bg-blue-500/20 text-blue-400',
-      agent: 'bg-purple-500/20 text-purple-400',
-      system: 'bg-amber-500/20 text-amber-400',
-      workflow: 'bg-emerald-500/20 text-emerald-400',
-    }
-    return (
-      <span className={`text-xs px-1.5 py-0.5 rounded font-mono ${colors[src] || 'bg-zinc-800 text-zinc-400'}`}>
-        {src}
-      </span>
-    )
-  }
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-mono text-lg font-semibold">Memory Bank</h2>
-          <p className="text-zinc-500 text-sm">
-            {count} stored memory{count !== 1 ? 'ies' : 'y'} — semantically indexed
-          </p>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <p className="font-mono text-[11px] text-zinc-500">
+        {count} {count === 1 ? 'memory' : 'memories'} · semantically indexed
+      </p>
 
-      {/* Add memory form */}
-      <form onSubmit={handleAddMemory} className="space-y-3 bg-zinc-900/30 border border-zinc-800 rounded p-4">
+      <Surface as="form" onSubmit={handleAddMemory} className="space-y-3 p-3">
         <textarea
           value={newMemory}
           onChange={(e) => setNewMemory(e.target.value)}
-          placeholder="Add a note, fact, or context to store..."
+          placeholder="Store a note, fact or piece of context…"
           rows={2}
-          className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-zinc-700 placeholder:text-zinc-600"
+          className={`${inputClass} resize-y`}
         />
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2">
           <input
-            type="text"
             value={newTags}
             onChange={(e) => setNewTags(e.target.value)}
-            placeholder="Tags (comma-separated)"
-            className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-zinc-700 placeholder:text-zinc-600"
+            placeholder="Tags, comma-separated"
+            className={`${inputClass} h-8 min-w-[10rem] flex-1 py-0 text-xs`}
           />
-          <select
+          <Segmented
+            size="sm"
             value={source}
-            onChange={(e) => setSource(e.target.value)}
-            className="bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-zinc-700"
-          >
-            <option value="user">User</option>
-            <option value="agent">Agent</option>
-            <option value="system">System</option>
-            <option value="workflow">Workflow</option>
-          </select>
-          <button
-            type="submit"
-            disabled={loading || !newMemory.trim()}
-            className="bg-zinc-100 text-zinc-950 px-4 py-2 text-sm font-medium rounded hover:bg-white transition-colors disabled:opacity-50"
-          >
-            Store
-          </button>
+            onChange={setSource}
+            label="Memory source"
+            options={SOURCES.map((s) => ({ value: s, label: s }))}
+          />
+          <Button type="submit" variant="primary" disabled={loading || !newMemory.trim()}>Store</Button>
         </div>
-      </form>
+      </Surface>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm rounded">
-          {error}
-        </div>
-      )}
+      {error && <Notice onDismiss={() => setError(null)}>{error}</Notice>}
 
-      {/* Memory list */}
-      {loading ? (
-        <div className="text-zinc-500 font-mono text-sm">Loading memories...</div>
+      {loading && memories.length === 0 ? (
+        <p className="font-mono text-xs text-zinc-500">Loading memories…</p>
       ) : memories.length === 0 ? (
-        <div className="text-center py-8 text-zinc-600">
-          <p className="font-mono">No memories stored yet.</p>
-          <p className="text-sm mt-1">Add a note above to get started.</p>
-        </div>
+        <p className="py-10 text-center font-mono text-[12px] text-zinc-600">No memories stored yet.</p>
       ) : (
         <div className="space-y-2">
           {memories.map((m) => (
-            <div
-              key={m.id}
-              className="bg-zinc-900/50 border border-zinc-800 rounded p-4 group hover:border-zinc-700 transition-colors"
-            >
-              <p className="text-sm text-zinc-300 whitespace-pre-wrap">{m.content}</p>
-              <div className="flex items-center gap-2 mt-3 text-xs text-zinc-600">
-                {sourceBadge(m.source)}
-                {m.tags?.map((tag, i) => (
-                  <span key={i} className="text-zinc-600 font-mono">#{tag}</span>
-                ))}
-                <span className="ml-auto font-mono">
-                  <TimeAgo ts={parseFloat(m.metadata?.created_at || m.created_at)} />
-                </span>
-                <button
+            <Surface key={m.id} className="group p-4">
+              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-zinc-300">{m.content}</p>
+              <div className="mt-3 flex items-center gap-2 font-mono text-[10px] text-zinc-600">
+                <Tag>{m.source}</Tag>
+                {m.tags?.map((tag) => <span key={tag}>#{tag}</span>)}
+                <span className="ml-auto">{timeAgo(parseFloat(m.metadata?.created_at || m.created_at))}</span>
+                <IconButton
+                  label="Delete memory"
+                  size="sm"
+                  className="opacity-0 hover:!text-red-300 group-hover:opacity-100"
                   onClick={() => handleDelete(m.id)}
-                  className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all"
                 >
-                  ×
-                </button>
+                  <IconClose className="h-3 w-3" />
+                </IconButton>
               </div>
-            </div>
+            </Surface>
           ))}
         </div>
       )}
@@ -395,15 +348,15 @@ function MemoryTab({ projectId }) {
   )
 }
 
-// ── Search Tab ────────────────────────────────────────────────────────────────
+// ── Search ──────────────────────────────────────────────────────────────────
 
 function SearchTab({ projectId }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
-  const [searched, setSearched] = useState(false)
+  const [searched, setSearched] = useState('')
   const [error, setError] = useState(null)
   const [topK, setTopK] = useState(5)
-  const [source, setSource] = useState(null)
+  const [source, setSource] = useState('')
 
   const handleSearch = async (e) => {
     e.preventDefault()
@@ -412,99 +365,66 @@ function SearchTab({ projectId }) {
       setError(null)
       const data = await searchMemories(projectId, query.trim(), topK, source || undefined)
       setResults(data.results || [])
-      setSearched(true)
-    } catch (e) {
-      setError(e.message)
+      setSearched(query.trim())
+    } catch (err) {
+      setError(err.message)
     }
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="font-mono text-lg font-semibold">Semantic Search</h2>
-        <p className="text-zinc-500 text-sm">
-          Search memories by meaning, not just keywords
-        </p>
-      </div>
-
+    <div className="space-y-5">
       <form onSubmit={handleSearch} className="space-y-3">
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <input
-            type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="What are you looking for?"
-            className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-4 py-3 text-sm focus:outline-none focus:border-zinc-700 placeholder:text-zinc-600"
+            placeholder="Search memories by meaning…"
+            className={`${inputClass} h-10 py-0`}
           />
-          <button
-            type="submit"
-            className="bg-zinc-100 text-zinc-950 px-6 py-3 text-sm font-medium rounded hover:bg-white transition-colors"
-          >
-            Search
-          </button>
+          <Button type="submit" variant="primary" className="!h-10">Search</Button>
         </div>
-        <div className="flex gap-4 text-xs text-zinc-500">
-          <label className="flex items-center gap-1.5">
-            Top K:
+        <div className="flex flex-wrap items-center gap-3 font-mono text-[11px] text-zinc-500">
+          <label className="flex items-center gap-2">
+            top k
             <input
               type="number"
               value={topK}
-              onChange={(e) => setTopK(parseInt(e.target.value) || 5)}
+              onChange={(e) => setTopK(parseInt(e.target.value, 10) || 5)}
               min={1}
               max={20}
-              className="w-12 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-center"
+              className={`${inputClass} h-7 w-14 px-2 py-0 text-center text-xs`}
             />
           </label>
-          <label className="flex items-center gap-1.5">
-            Source:
-            <select
-              value={source || ''}
-              onChange={(e) => setSource(e.target.value || null)}
-              className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1"
-            >
-              <option value="">All</option>
-              <option value="user">User</option>
-              <option value="agent">Agent</option>
-              <option value="system">System</option>
-              <option value="workflow">Workflow</option>
-            </select>
-          </label>
+          <Segmented
+            size="sm"
+            value={source}
+            onChange={setSource}
+            label="Source filter"
+            options={[{ value: '', label: 'all' }, ...SOURCES.map((s) => ({ value: s, label: s }))]}
+          />
         </div>
       </form>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm rounded">
-          {error}
-        </div>
-      )}
+      {error && <Notice onDismiss={() => setError(null)}>{error}</Notice>}
 
       {searched && (
-        <div>
-          <div className="text-xs text-zinc-500 font-mono mb-3">
-            {results.length} result{results.length !== 1 ? 's' : ''} for "{query}"
-          </div>
+        <div className="space-y-2">
+          <Eyebrow>{plural(results.length, 'result')} for “{searched}”</Eyebrow>
           {results.length === 0 ? (
-            <div className="text-zinc-600 text-sm">No matching memories found.</div>
+            <p className="font-mono text-[12px] text-zinc-600">No matching memories.</p>
           ) : (
-            <div className="space-y-3">
-              {results.map((r, i) => (
-                <div
-                  key={r.id || i}
-                  className="bg-zinc-900/50 border border-zinc-800 rounded p-4 hover:border-zinc-700 transition-colors"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-mono text-zinc-600">
-                      Score: {(r.score * 100).toFixed(1)}%
-                    </span>
-                    <span className="text-xs font-mono text-zinc-700">|</span>
-                    <span className="text-xs font-mono text-zinc-500">
-                      {r.metadata?.source || 'unknown'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-zinc-300">{r.content}</p>
+            results.map((r, i) => (
+              <Surface key={r.id || i} className="p-4">
+                <div className="mb-2 flex items-center gap-3 font-mono text-[10px] text-zinc-500">
+                  <span className="relative h-1 w-16 overflow-hidden rounded-full bg-white/[0.06]">
+                    <span className="absolute inset-y-0 left-0 rounded-full bg-zinc-200" style={{ width: `${Math.max(0, Math.min(1, r.score)) * 100}%` }} />
+                  </span>
+                  <span>{(r.score * 100).toFixed(1)}%</span>
+                  <span className="text-zinc-600">{r.metadata?.source || 'unknown'}</span>
                 </div>
-              ))}
-            </div>
+                <p className="text-[13px] leading-relaxed text-zinc-300">{r.content}</p>
+              </Surface>
+            ))
           )}
         </div>
       )}
@@ -512,79 +432,49 @@ function SearchTab({ projectId }) {
   )
 }
 
-// ── Main Page ────────────────────────────────────────────────────────────────
+// ── Page ────────────────────────────────────────────────────────────────────
 
 export default function ProjectDetail() {
   const { id } = useParams()
-  const navigate = useNavigate()
   const [project, setProject] = useState(null)
-  const [tab, setTab] = useState('Overview')
+  const [tab, setTab] = useState('overview')
   const [error, setError] = useState(null)
 
-  const fetchProject = async () => {
-    try {
-      const data = await getProject(id)
-      setProject(data)
-      setError(null)
-    } catch (e) {
-      setError(e.message)
-    }
-  }
-
-  useEffect(() => { fetchProject() }, [id])
+  useEffect(() => {
+    getProject(id)
+      .then((data) => { setProject(data); setError(null) })
+      .catch((e) => setError(e.message))
+  }, [id])
 
   if (error) {
     return (
-      <div className="text-center py-16">
-        <p className="text-red-400 font-mono">{error}</p>
-        <button
-          onClick={() => navigate('/projects')}
-          className="mt-4 text-sm text-zinc-500 hover:text-zinc-300"
-        >
-          ← Back to Projects
-        </button>
-      </div>
+      <EmptyState
+        icon={IconProjects}
+        title="Couldn’t load project"
+        body={error}
+        action={<Button to="/projects">Back to projects</Button>}
+      />
     )
   }
 
   if (!project) {
-    return <div className="text-zinc-500 font-mono text-sm">Loading...</div>
+    return <p className="font-mono text-sm text-zinc-500">Loading project…</p>
   }
 
   return (
-    <div className="space-y-6">
-      {/* Back link + Title */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => navigate('/projects')}
-          className="text-zinc-500 hover:text-zinc-300 text-sm"
-        >
-          ← Projects
-        </button>
+    <div>
+      <PageHeader
+        back={{ to: '/projects', label: 'Projects' }}
+        title={project.name}
+        subtitle={project.description || 'No description'}
+      />
+      <div className="mb-6">
+        <Segmented value={tab} onChange={setTab} options={TABS} label="Project sections" />
       </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-zinc-800">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              tab === t
-                ? 'border-white text-zinc-200'
-                : 'border-transparent text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      {tab === 'Overview' && <OverviewTab project={project} />}
-      {tab === 'Sessions' && <SessionsTab projectId={id} project={project} />}
-      {tab === 'Memory' && <MemoryTab projectId={id} />}
-      {tab === 'Search' && <SearchTab projectId={id} />}
+      {tab === 'overview' && <OverviewTab project={project} />}
+      {tab === 'sessions' && <SessionsTab projectId={id} />}
+      {tab === 'memory' && <MemoryTab projectId={id} />}
+      {tab === 'search' && <SearchTab projectId={id} />}
     </div>
   )
 }

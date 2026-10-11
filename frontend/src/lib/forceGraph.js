@@ -2,7 +2,7 @@
  * Obsidian-style force-directed layout in field-% space (0–100).
  * Stays gently warm so nodes keep a soft organic drift after settling.
  *
- * Spacing scales with herd size: a handful stay close; ~100 get more air.
+ * Spacing scales with field size: a handful stay close; ~100 get more air.
  */
 
 import {
@@ -23,7 +23,7 @@ export function spacingForCount(n) {
   const count = Math.max(1, n)
   // 0 at ≤6, 1 at ≥100
   const t = Math.min(1, Math.max(0, (count - 6) / 94))
-  const e = t * t // ease-in so mid-size herds don't blow out early
+  const e = t * t // ease-in so mid-size fields don't blow out early
   return {
     linkDist: 13 + e * 20,
     collideR: 6.2 + e * 5.2,

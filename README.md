@@ -4,6 +4,20 @@ Visual orchestration layer for heterogeneous AI agents. Framework-agnostic. MIT 
 
 Works on **macOS and Linux**.
 
+**Panes** is the built-in terminal multiplexer: named workspaces, fluid resizable agent PTYs (dividers push neighbours, panes glide when the layout changes), and attention rings on agents that need you. Open it from the command-center toggle or `/?view=panes`.
+
+| Keys | Action |
+|------|--------|
+| `⌘K` / `Ctrl+K` | Command palette (everywhere) |
+| `⌥D` / `⌥⇧D` | Split right / down |
+| `⌥W` | Close pane |
+| `⌥Z` | Zoom / restore pane |
+| `⌥⇧←→↑↓` | Push the focused pane's border |
+| `⌥=` | Even out pane sizes (or double-click a divider) |
+| Drag a pane header | Dock it beside another pane, or drop in the middle to swap |
+| `⌥]` / `⌥[` | Next / previous pane |
+| `⌥N`, `⌥1–9` | New / switch workspace |
+
 ## Architecture
 
 ```

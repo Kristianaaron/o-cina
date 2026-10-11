@@ -30,12 +30,12 @@ export default function AgentChat({
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.parentElement?.scrollTo({ top: 1e9, behavior: 'smooth' })
   }, [messages])
 
   // Focus input on mount
   useEffect(() => {
-    inputRef.current?.focus()
+    inputRef.current?.focus({ preventScroll: true })
   }, [])
 
   async function sendMessage() {
@@ -194,139 +194,101 @@ export default function AgentChat({
   }
 
   const statusIndicator = (status) => {
-    switch (status) {
-      case 'pending':
-        return <span className="text-yellow-400 animate-pulse text-xs">● queued</span>
-      case 'processing':
-        return <span className="text-yellow-400 animate-pulse text-xs">● processing</span>
-      case 'completed':
-        return null
-      case 'error':
-        return <span className="text-red-400 text-xs">● failed</span>
-      default:
-        return null
-    }
+    if (status === 'pending') return <span className="ml-2 animate-pulse text-zinc-500">queued</span>
+    if (status === 'processing') return <span className="ml-2 animate-pulse text-zinc-500">thinking…</span>
+    if (status === 'error') return <span className="ml-2 text-red-400">failed</span>
+    return null
   }
 
   return (
-    <div className="flex h-96 flex-col">
-      {/* Chat header */}
+    <div className="flex h-full min-h-[24rem] flex-col">
       {!hideHeader && (
-        <div className="flex items-center border-t border-zinc-800 bg-zinc-900 px-3 py-1 font-mono text-xs">
-          <span className="text-zinc-400">chat with</span>
-          <span className="ml-1 text-zinc-200">{agentName || agentId?.slice(0, 8)}</span>
-          {sessionId && (
-            <>
-              <span className="mx-1 text-zinc-600">|</span>
-              <span className="text-zinc-500" title={sessionId}>session active</span>
-            </>
-          )}
+        <div className="flex h-9 items-center gap-2 border-b border-white/[0.05] px-3 font-mono text-[11px]">
+          <span className="text-zinc-500">chat with</span>
+          <span className="text-zinc-200">{agentName || agentId?.slice(0, 8)}</span>
+          {sessionId && <span className="text-zinc-600" title={sessionId}>· session active</span>}
           <div className="flex-1" />
           {onToggleTerminal && (
-            <button
-              type="button"
-              onClick={onToggleTerminal}
-              className="mr-2 text-xs text-zinc-500 underline hover:text-zinc-300"
-              title="Switch to terminal (TUI) view"
-            >
-              [TUI]
+            <button type="button" onClick={onToggleTerminal} className="text-zinc-500 hover:text-zinc-200">
+              terminal
             </button>
           )}
           {messages.length > 0 && (
-            <button
-              type="button"
-              onClick={clearChat}
-              className="text-xs text-zinc-500 underline hover:text-zinc-300"
-            >
-              clear
-            </button>
+            <button type="button" onClick={clearChat} className="text-zinc-500 hover:text-zinc-200">clear</button>
           )}
         </div>
       )}
-      {hideHeader && messages.length > 0 && (
-        <div className="flex justify-end border-b border-zinc-800/80 bg-zinc-950 px-3 py-1">
-          <button
-            type="button"
-            onClick={clearChat}
-            className="font-mono text-[10px] text-zinc-500 underline hover:text-zinc-300"
-          >
-            clear
-          </button>
-        </div>
-      )}
 
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-zinc-950">
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5">
         {messages.length === 0 && (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-zinc-500 text-sm font-mono text-center">
-              Type a message below to prompt {agentName || 'this agent'}
+          <div className="flex h-full items-center justify-center">
+            <p className="text-center font-mono text-[12px] text-zinc-600">
+              Prompt {agentName || 'this agent'} to start a session
             </p>
           </div>
         )}
 
         {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className={`max-w-80% px-3 py-2 rounded text-sm font-mono whitespace-pre-wrap ${
-                msg.role === 'user'
-                  ? 'bg-zinc-200 text-zinc-900'
-                  : 'bg-zinc-900 border border-zinc-800 text-zinc-200'
-              }`}
-            >
-              {msg.role === 'assistant' && !msg.text && msg.status !== 'completed' && (
-                <div className="flex items-center gap-1.5">
-                  <span className="animate-pulse">●</span>
-                  <span className="text-zinc-500 italic">Waiting for response...</span>
+          msg.role === 'user' ? (
+            <div key={i} className="ml-auto max-w-[85%] rounded-xl bg-white/[0.05] px-3.5 py-2.5 text-[13px] leading-relaxed text-zinc-100 ring-1 ring-inset ring-white/[0.06]">
+              <p className="whitespace-pre-wrap">{msg.text}</p>
+            </div>
+          ) : (
+            <div key={i} className="max-w-[92%]">
+              <p className="mb-1.5 font-mono text-[11px] text-zinc-400">
+                {agentName}
+                {statusIndicator(msg.status)}
+              </p>
+              {msg.text ? (
+                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-zinc-200">{msg.text}</p>
+              ) : (
+                <div className="flex items-center gap-1.5 py-1">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-400" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-400 [animation-delay:120ms]" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-400 [animation-delay:240ms]" />
                 </div>
               )}
-              {msg.text && (
-                <>
-                  <p className="text-xs text-zinc-500 mb-1">
-                    {msg.role === 'user' ? 'You' : agentName}
-                    {statusIndicator(msg.status)}
-                  </p>
-                  <p>{msg.text}</p>
-                </>
-              )}
             </div>
-          </div>
+          )
         ))}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Error bar */}
       {error && (
-        <div className="px-3 py-1 bg-red-900/30 text-red-300 text-xs font-mono flex items-center">
-          <span>⚠ {error}</span>
-          <button onClick={() => setError(null)} className="ml-2 underline">dismiss</button>
+        <div className="flex items-center gap-2 border-t border-red-500/20 bg-red-500/[0.06] px-4 py-1.5 font-mono text-[11px] text-red-300">
+          <span className="min-w-0 flex-1 truncate">{error}</span>
+          <button type="button" onClick={() => setError(null)} className="text-red-300/70 hover:text-red-200">dismiss</button>
         </div>
       )}
 
-      {/* Input area */}
-      <div className="p-2 bg-zinc-900 border-b border-zinc-800">
-        <div className="flex gap-2">
+      <div className="border-t border-white/[0.05] p-3">
+        <div className="flex items-end gap-2 rounded-xl bg-white/[0.03] py-1.5 pl-3 pr-1.5 ring-1 ring-inset ring-white/[0.08] focus-within:ring-white/20">
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a message to the agent..."
-            rows={2}
+            placeholder={`Message ${agentName || 'agent'}…`}
+            rows={1}
             disabled={sending}
-            className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-3 py-1.5 text-sm font-mono text-zinc-200 placeholder-zinc-600 resize-none disabled:opacity-50 focus:border-zinc-600"
+            className="max-h-32 min-h-[1.75rem] min-w-0 flex-1 resize-none bg-transparent py-1 text-[13px] text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:opacity-50"
           />
           <button
+            type="button"
             onClick={sendMessage}
             disabled={!input.trim() || sending}
-            className="px-3 py-1.5 bg-zinc-100 text-zinc-950 rounded font-mono text-sm disabled:opacity-30 hover:bg-white self-end"
+            className="flex h-7 shrink-0 items-center rounded-lg bg-zinc-100 px-3 font-mono text-[11px] font-medium text-zinc-950 transition-colors hover:bg-white disabled:opacity-30"
           >
             {sending ? '···' : 'Send'}
           </button>
         </div>
-        <p className="mt-1 font-mono text-xs text-zinc-600">
-          Enter to send · Shift+Enter for newline
-        </p>
+        <div className="mt-1.5 flex items-center px-1 font-mono text-[10px] text-zinc-600">
+          <span>↵ send · ⇧↵ newline</span>
+          <div className="flex-1" />
+          {hideHeader && messages.length > 0 && (
+            <button type="button" onClick={clearChat} className="hover:text-zinc-300">clear</button>
+          )}
+        </div>
       </div>
     </div>
   )
